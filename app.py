@@ -6,6 +6,7 @@ import hashlib
 import random
 import string
 from PIL import Image
+import shutil
 
 # --- Configuration ---
 st.set_page_config(page_title="Gestion des Équipes du Rosaire - Diocèse de Grand-Bassam", layout="wide")
@@ -74,7 +75,6 @@ def equipe_existe(paroisse_id, nom_equipe, exclude_id=None):
     return c.execute(query, params).fetchone() is not None
 
 def paroisse_existe(nom, commune, ville, exclude_id=None):
-    """Vérifie si une paroisse existe déjà (nom + commune + ville)"""
     if exclude_id:
         query = "SELECT id FROM paroisses WHERE nom=? AND commune=? AND ville=? AND id != ?"
         params = (nom, commune, ville, exclude_id)
@@ -82,6 +82,40 @@ def paroisse_existe(nom, commune, ville, exclude_id=None):
         query = "SELECT id FROM paroisses WHERE nom=? AND commune=? AND ville=?"
         params = (nom, commune, ville)
     return c.execute(query, params).fetchone() is not None
+
+def sans_accents(texte):
+    """Supprime les accents d'un texte"""
+    texte = texte.lower()
+    accents = {
+        'é': 'e', 'è': 'e', 'ê': 'e', 'ë': 'e',
+        'à': 'a', 'â': 'a', 'ä': 'a',
+        'î': 'i', 'ï': 'i',
+        'ô': 'o', 'ö': 'o',
+        'ù': 'u', 'û': 'u', 'ü': 'u',
+        'ç': 'c'
+    }
+    for accent, lettre in accents.items():
+        texte = texte.replace(accent, lettre)
+    return texte
+
+def nettoyer_nom_paroisse(nom):
+    """Supprime les préfixes religieux (Saint, Sainte, Notre-Dame, etc.)"""
+    mots_a_supprimer = [
+        "saint", "sainte", "Notre", "Dame", "St", "Ste", "notre-dame", "dame", 
+        "st", "ste", "nd", "notre dame",
+        "monseigneur", "mgr", "père", "pere"
+    ]
+    nom_clean = nom.lower()
+    for mot in mots_a_supprimer:
+        if nom_clean.startswith(mot + " "):
+            nom_clean = nom_clean[len(mot)+1:]
+        elif nom_clean.startswith(mot):
+            nom_clean = nom_clean[len(mot):]
+    nom_clean = nom_clean.strip()
+    if len(nom_clean) >= 3:
+        return nom_clean[:3]
+    else:
+        return nom_clean
 
 # --- Création des tables ---
 c.execute('''CREATE TABLE IF NOT EXISTS diocese (id INTEGER PRIMARY KEY, nom TEXT, responsable TEXT, bureau TEXT)''')
@@ -158,7 +192,7 @@ st.markdown("---")
 # ==================== DIOCÈSE ====================
 if st.session_state['role'] == 'diocese':
     
-    menu = st.sidebar.radio("Navigation", ["Voir diocèse", "Créer paroisses", "Gérer paroisses", "Rechercher par matricule", "Gérer les accès", "Statistiques"])
+    menu = st.sidebar.radio("Navigation", ["Voir diocèse", "Créer paroisses", "Gérer paroisses", "Rechercher par matricule", "Gérer les accès", "Statistiques", "🗑️ Réinitialiser tout"])
     
     if menu == "Voir diocèse":
         st.markdown('<h2 style="color:#1A237E;">🏛️ DIOCÈSE DE GRAND-BASSAM</h2>', unsafe_allow_html=True)
@@ -188,7 +222,6 @@ if st.session_state['role'] == 'diocese':
                 bureau = st.text_area("Bureau")
             if st.form_submit_button("🏘️ Créer paroisses"):
                 if nom and commune and ville and responsable:
-                    # Vérification anti-doublon
                     if paroisse_existe(nom, commune, ville):
                         st.error(f"❌ La paroisse '{nom}' à {commune} ({ville}) existe déjà !")
                     else:
@@ -201,7 +234,13 @@ if st.session_state['role'] == 'diocese':
                                   (username, hash_password(mdp), "paroisse", 1, pid))
                         conn.commit()
                         st.success(f"✅ Paroisse '{nom}' créée")
-                        st.info(f"Identifiant: {username} | Mot de passe: {mdp}")
+                        st.markdown(f"""
+                        <div style="background-color:#e8f5e9; padding:15px; border-radius:10px; margin:10px 0;">
+                            <strong>📋 Identifiants à remettre au responsable</strong><br>
+                            🔑 Identifiant : <code>{username}</code><br>
+                            🔒 Mot de passe : <code>{mdp}</code>
+                        </div>
+                        """, unsafe_allow_html=True)
                 else:
                     st.error("Veuillez remplir tous les champs (nom, commune, ville, responsable)")
     
@@ -255,7 +294,6 @@ if st.session_state['role'] == 'diocese':
                         nouveau = generer_mot_de_passe()
                         c.execute("UPDATE utilisateurs SET password=? WHERE id=?", (hash_password(nouveau), user[0]))
                         conn.commit()
-                        # Affichage durable du nouveau mot de passe (pas de st.rerun immédiat)
                         st.success(f"✅ Mot de passe réinitialisé !")
                         st.markdown(f"""
                         <div style="background-color:#f0f2f6; padding:15px; border-radius:10px; margin:10px 0;">
@@ -264,7 +302,6 @@ if st.session_state['role'] == 'diocese':
                         </div>
                         """, unsafe_allow_html=True)
                         st.info("📝 Notez ce mot de passe avant de continuer")
-                        st.rerun()
     
     elif menu == "Statistiques":
         st.markdown('<h2 style="color:#1A237E;">📊 Statistiques</h2>', unsafe_allow_html=True)
@@ -275,9 +312,415 @@ if st.session_state['role'] == 'diocese':
         col1.metric("Paroisses", nb_p)
         col2.metric("Équipes", nb_e)
         col3.metric("Membres", nb_m)
+    
+    elif menu == "🗑️ Réinitialiser tout":
+        st.markdown('<h2 style="color:#1A237E;">🗑️ RÉINITIALISATION COMPLÈTE</h2>', unsafe_allow_html=True)
+        st.error("⚠️ ACTION IRRÉVERSIBLE ! Cette opération va supprimer TOUTES les données :")
+        st.markdown("- Toutes les paroisses")
+        st.markdown("- Toutes les équipes")
+        st.markdown("- Tous les membres")
+        st.markdown("- Tous les comptes (sauf le diocèse)")
+        st.markdown("- Toutes les photos")
+        
+        with st.expander("🔴 Cliquez ici pour réinitialiser (action définitive)"):
+            st.warning("Cette action est irréversible. Toutes les données seront perdues.")
+            confirmation = st.text_input("Tapez 'SUPPRIMER' pour confirmer")
+            if confirmation == "SUPPRIMER":
+                if os.path.exists("photos"):
+                    shutil.rmtree("photos")
+                    os.makedirs("photos")
+                c.execute("DELETE FROM membres")
+                c.execute("DELETE FROM equipes")
+                c.execute("DELETE FROM paroisses")
+                c.execute("DELETE FROM utilisateurs WHERE role != 'diocese'")
+                conn.commit()
+                st.success("✅ Toutes les données ont été supprimées avec succès !")
+                st.info("Il ne reste que le compte diocèse. Vous pouvez recréer vos paroisses.")
+                st.balloons()
+                st.rerun()
 
 # ==================== PAROISSE ====================
-# (le reste du code est identique, je l'ai raccourci pour la lisibilité mais il est complet)
-# ... (je m'arrête ici car le message est long, mais le code continue normalement)
+elif st.session_state['role'] == 'paroisse':
+    
+    pid = st.session_state['paroisse_id']
+    nom_paroisse = c.execute("SELECT nom FROM paroisses WHERE id=?", (pid,)).fetchone()
+    if nom_paroisse:
+        nom_paroisse = nom_paroisse[0]
+    else:
+        nom_paroisse = "Ma paroisse"
+    
+    menu = st.sidebar.radio("Navigation", ["Ma paroisse", "Mes équipes", "Membres", "Statistiques", "Modifier paroisse", "Gérer les accès"])
+    
+    if menu == "Ma paroisse":
+        st.markdown(f'<h2 style="color:#1A237E;">🏘️ {nom_paroisse}</h2>', unsafe_allow_html=True)
+        p = c.execute("SELECT commune, ville, responsable, bureau FROM paroisses WHERE id=?", (pid,)).fetchone()
+        if p:
+            st.write(f"**Commune:** {p[0]}")
+            st.write(f"**Ville:** {p[1]}")
+            st.write(f"**Responsable:** {p[2]}")
+            st.write(f"**Bureau:** {p[3]}")
 
-print("Application déployée avec succès")
+    elif menu == "Mes équipes":
+        st.markdown(f'<h2 style="color:#1A237E;">👥 Équipes de {nom_paroisse}</h2>', unsafe_allow_html=True)
+        
+        # Récupérer les infos de la paroisse
+        paroisse_info = c.execute("SELECT nom, commune FROM paroisses WHERE id=?", (pid,)).fetchone()
+        
+        if paroisse_info:
+            # Nettoyer le nom de la paroisse (enlever Saint, Sainte, etc.)
+            nom_clean = paroisse_info[0].lower()
+            mots_a_supprimer = ["saint ", "sainte ", "Notre", "Dame", "St", "Ste", "notre-dame ", "dame ", "st ", "ste ", "nd "]
+            for mot in mots_a_supprimer:
+                if nom_clean.startswith(mot):
+                    nom_clean = nom_clean[len(mot):]
+            nom_clean = nom_clean.strip()
+            prefixe_paroisse = sans_accents(nom_clean[:3])
+            
+            # 3 premières lettres de la commune sans accents
+            prefixe_commune = sans_accents(paroisse_info[1][:3])
+            
+            # Assembler le préfixe
+            prefixe = f"{prefixe_paroisse}{prefixe_commune}"
+            
+            # Compter les équipes existantes
+            nb_equipes = c.execute("SELECT COUNT(*) FROM equipes WHERE paroisse_id=?", (pid,)).fetchone()[0]
+            prochain_numero = nb_equipes + 1
+            identifiant_suggest = f"{prefixe}eq{prochain_numero}"
+            
+            st.info(f"💡 Format des identifiants : **{prefixe}eqX** (ex: {identifiant_suggest})")
+        else:
+            st.error("Erreur : paroisse non trouvée")
+            st.stop()
+        
+        with st.expander("➕ Créer équipes"):
+            with st.form("ajout_eq"):
+                col1, col2 = st.columns(2)
+                with col1:
+                    nom_eq = st.text_input("Nom de l'équipe (ex: 3, Jeune, Enfant)")
+                    responsable = st.text_input("Responsable")
+                with col2:
+                    bureau = st.text_area("Bureau")
+                
+                # Mot de passe auto-généré
+                mdp_auto = generer_mot_de_passe()
+                st.caption(f"🔑 Mot de passe généré : `{mdp_auto}`")
+                
+                if st.form_submit_button("Créer équipes"):
+                    if nom_eq and responsable:
+                        if equipe_existe(pid, nom_eq):
+                            st.error("❌ Cette équipe existe déjà dans votre paroisse")
+                        else:
+                            # Compter à nouveau pour avoir le bon numéro
+                            nb_equipes_avant = c.execute("SELECT COUNT(*) FROM equipes WHERE paroisse_id=?", (pid,)).fetchone()[0]
+                            nouveau_numero = nb_equipes_avant + 1
+                            identifiant = f"{prefixe}eq{nouveau_numero}"
+                            
+                            c.execute("INSERT INTO equipes (nom_equipe, responsable, bureau, paroisse_id) VALUES (?, ?, ?, ?)",
+                                    (nom_eq, responsable, bureau, pid))
+                            eid = c.lastrowid
+                            c.execute("INSERT INTO utilisateurs (username, password, role, paroisse_id, equipe_id) VALUES (?, ?, ?, ?, ?)",
+                                    (identifiant, hash_password(mdp_auto), "equipe", pid, eid))
+                            conn.commit()
+                            
+                            st.success(f"✅ Équipe '{nom_eq}' créée")
+                            st.markdown(f"""
+                            <div style="background-color:#e8f5e9; padding:15px; border-radius:10px; margin:10px 0;">
+                                <strong>📋 Identifiants à remettre au responsable</strong><br>
+                                🔑 Identifiant : <code>{identifiant}</code><br>
+                                🔒 Mot de passe : <code>{mdp_auto}</code>
+                            </div>
+                            """, unsafe_allow_html=True)
+                            st.rerun()
+                    else:
+                        st.error("Le nom de l'équipe et le responsable sont obligatoires")
+        
+        # Liste des équipes existantes
+        equipes = c.execute("SELECT id, nom_equipe, responsable FROM equipes WHERE paroisse_id=? ORDER BY id", (pid,)).fetchall()
+        if equipes:
+            st.markdown("---")
+            st.subheader("📋 Équipes existantes")
+            for eq in equipes:
+                user = c.execute("SELECT username FROM utilisateurs WHERE equipe_id=? AND role='equipe'", (eq[0],)).fetchone()
+                identifiant = user[0] if user else "inconnu"
+                st.write(f"- **{eq[1]}** - Responsable: {eq[2]} (`{identifiant}`)")
+        else:
+            st.info("Aucune équipe créée pour le moment")
+    
+    elif menu == "Membres":
+        st.markdown(f'<h2 style="color:#1A237E;">👤 Membres de {nom_paroisse}</h2>', unsafe_allow_html=True)
+        equipes = c.execute("SELECT id, nom_equipe FROM equipes WHERE paroisse_id=?", (pid,)).fetchall()
+        if equipes:
+            equipe_dict = {eq[1]: eq[0] for eq in equipes}
+            choix = st.selectbox("Choisir une équipe", list(equipe_dict.keys()))
+            eid = equipe_dict[choix]
+            nb = c.execute("SELECT COUNT(*) FROM membres WHERE equipe_id=?", (eid,)).fetchone()[0]
+            st.info(f"{nb}/10 membres")
+            
+            if nb < 10:
+                with st.expander("➕ Ajouter un membre"):
+                    with st.form(f"add_membre_{st.session_state['form_counter']}"):
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            nom = st.text_input("Nom")
+                            prenom = st.text_input("Prénom")
+                            naissance = st.date_input("Date de naissance", min_value=date(1930,1,1), max_value=date.today())
+                            telephone = st.text_input("Téléphone")
+                        with col2:
+                            whatsapp = st.text_input("WhatsApp")
+                            photo = st.file_uploader("Photo", type=['jpg', 'png', 'jpeg'])
+                        if st.form_submit_button("Ajouter"):
+                            if nom and prenom:
+                                existant = membre_existe_deja(nom, prenom, naissance)
+                                if existant:
+                                    st.error(f"❌ Ce membre existe déjà avec le matricule {existant}")
+                                else:
+                                    matricule = generer_matricule_unique()
+                                    c.execute("INSERT INTO membres (matricule, nom, prenom, date_naissance, telephone, whatsapp, date_adhesion, paroisse_id, equipe_id) VALUES (?,?,?,?,?,?,?,?,?)",
+                                              (matricule, nom, prenom, naissance, telephone, whatsapp, date.today(), pid, eid))
+                                    mid = c.lastrowid
+                                    if photo:
+                                        chemin = sauvegarder_photo(photo, matricule)
+                                        c.execute("UPDATE membres SET photo_path=? WHERE id=?", (chemin, mid))
+                                    conn.commit()
+                                    st.success(f"✅ Membre ajouté ! Matricule: {matricule}")
+                                    st.session_state['form_counter'] = st.session_state.get('form_counter', 0) + 1
+                                    st.rerun()
+                            else:
+                                st.error("Le nom et le prénom sont obligatoires")
+            
+            # Liste des membres
+            membres = c.execute("SELECT id, matricule, nom, prenom, telephone, whatsapp, photo_path FROM membres WHERE equipe_id=? ORDER BY nom", (eid,)).fetchall()
+            if membres:
+                for m in membres:
+                    with st.expander(f"**{m[2]} {m[3]}** - {m[1]}"):
+                        col1, col2 = st.columns([3, 1])
+                        with col1:
+                            st.write(f"📞 Tél: {m[4]}, WhatsApp: {m[5]}")
+                            if m[6] and os.path.exists(m[6]):
+                                st.image(m[6], width=80)
+                        with col2:
+                            if st.button("✏️ Modifier", key=f"mod_par_{m[0]}"):
+                                st.session_state['modif_membre_id'] = m[0]
+                                st.session_state['modif_equipe_id'] = eid
+                                st.rerun()
+                            if st.button("🗑️ Supprimer", key=f"del_par_{m[0]}"):
+                                c.execute("DELETE FROM membres WHERE id=?", (m[0],))
+                                conn.commit()
+                                st.success("Membre supprimé")
+                                st.rerun()
+            else:
+                st.info("Aucun membre dans cette équipe")
+            
+            # Modification
+            if 'modif_membre_id' in st.session_state:
+                mid = st.session_state['modif_membre_id']
+                membre = c.execute("SELECT matricule, nom, prenom, telephone, whatsapp FROM membres WHERE id=?", (mid,)).fetchone()
+                if membre:
+                    st.markdown("---")
+                    st.markdown(f"### ✏️ Modifier {membre[1]} {membre[2]}")
+                    with st.form("modif_membre"):
+                        new_nom = st.text_input("Nom", value=membre[1])
+                        new_prenom = st.text_input("Prénom", value=membre[2])
+                        new_tel = st.text_input("Téléphone", value=membre[3])
+                        new_whats = st.text_input("WhatsApp", value=membre[4])
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.form_submit_button("💾 Enregistrer"):
+                                c.execute("UPDATE membres SET nom=?, prenom=?, telephone=?, whatsapp=? WHERE id=?",
+                                          (new_nom, new_prenom, new_tel, new_whats, mid))
+                                conn.commit()
+                                del st.session_state['modif_membre_id']
+                                st.success("Membre modifié")
+                                st.rerun()
+                        with col2:
+                            if st.form_submit_button("❌ Annuler"):
+                                del st.session_state['modif_membre_id']
+                                st.rerun()
+        else:
+            st.warning("⚠️ Créez d'abord une équipe dans 'Mes équipes'")
+    
+    elif menu == "Statistiques":
+        st.markdown(f'<h2 style="color:#1A237E;">📊 Statistiques de {nom_paroisse}</h2>', unsafe_allow_html=True)
+        nb_eq = c.execute("SELECT COUNT(*) FROM equipes WHERE paroisse_id=?", (pid,)).fetchone()[0]
+        nb_m = c.execute("SELECT COUNT(*) FROM membres WHERE paroisse_id=?", (pid,)).fetchone()[0]
+        col1, col2 = st.columns(2)
+        col1.metric("Équipes", nb_eq)
+        col2.metric("Membres", nb_m)
+    
+    elif menu == "Modifier paroisse":
+        st.markdown(f'<h2 style="color:#1A237E;">✏️ Modifier {nom_paroisse}</h2>', unsafe_allow_html=True)
+        p = c.execute("SELECT nom, commune, ville, responsable, bureau FROM paroisses WHERE id=?", (pid,)).fetchone()
+        if p:
+            with st.form("modif_paroisse"):
+                col1, col2 = st.columns(2)
+                with col1:
+                    nom = st.text_input("Nom", value=p[0])
+                    commune = st.text_input("Commune", value=p[1])
+                    responsable = st.text_input("Responsable", value=p[3])
+                with col2:
+                    ville = st.text_input("Ville", value=p[2])
+                    bureau = st.text_area("Bureau", value=p[4])
+                if st.form_submit_button("Enregistrer"):
+                    if (nom != p[0] or commune != p[1] or ville != p[2]) and paroisse_existe(nom, commune, ville, exclude_id=pid):
+                        st.error("❌ Une autre paroisse avec ce nom, commune et ville existe déjà")
+                    else:
+                        c.execute("UPDATE paroisses SET nom=?, commune=?, ville=?, responsable=?, bureau=? WHERE id=?",
+                                  (nom, commune, ville, responsable, bureau, pid))
+                        conn.commit()
+                        st.success("Paroisse modifiée")
+                        st.rerun()
+    
+    elif menu == "Gérer les accès":
+        st.markdown(f'<h2 style="color:#1A237E;">🔐 Gestion des accès des équipes</h2>', unsafe_allow_html=True)
+        equipes = c.execute("SELECT id, nom_equipe, responsable FROM equipes WHERE paroisse_id=?", (pid,)).fetchall()
+        if equipes:
+            for eq in equipes:
+                user = c.execute("SELECT id, username FROM utilisateurs WHERE equipe_id=? AND role='equipe'", (eq[0],)).fetchone()
+                if user:
+                    with st.expander(f"👥 {eq[1]} - {eq[2]}"):
+                        st.write(f"**Identifiant:** `{user[1]}`")
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.button(f"🔄 Réinitialiser", key=f"reset_eq_{eq[0]}"):
+                                nouveau = generer_mot_de_passe()
+                                c.execute("UPDATE utilisateurs SET password=? WHERE id=?", (hash_password(nouveau), user[0]))
+                                conn.commit()
+                                st.success(f"✅ Mot de passe réinitialisé !")
+                                st.markdown(f"""
+                                <div style="background-color:#f0f2f6; padding:15px; border-radius:10px; margin:10px 0;">
+                                    <strong>🔑 Nouveau mot de passe pour {eq[1]}</strong><br>
+                                    <code style="font-size:1.2em;">{nouveau}</code>
+                                </div>
+                                """, unsafe_allow_html=True)
+                        with col2:
+                            if st.button(f"🗑️ Supprimer équipe", key=f"del_eq_{eq[0]}"):
+                                c.execute("DELETE FROM membres WHERE equipe_id=?", (eq[0],))
+                                c.execute("DELETE FROM equipes WHERE id=?", (eq[0],))
+                                c.execute("DELETE FROM utilisateurs WHERE id=?", (user[0],))
+                                conn.commit()
+                                st.success(f"Équipe {eq[1]} supprimée")
+                                st.rerun()
+        else:
+            st.info("Aucune équipe dans cette paroisse")
+
+# ==================== ÉQUIPE ====================
+elif st.session_state['role'] == 'equipe':
+    
+    eid = st.session_state['equipe_id']
+    equipe_info = c.execute("SELECT nom_equipe FROM equipes WHERE id=?", (eid,)).fetchone()
+    if equipe_info:
+        nom_equipe = equipe_info[0]
+    else:
+        nom_equipe = "Mon équipe"
+    
+    menu = st.sidebar.radio("Navigation", ["Mon équipe", "Mes membres", "Modifier mon équipe"])
+    
+    if menu == "Mon équipe":
+        st.markdown(f'<h2 style="color:#1A237E;">👥 {nom_equipe}</h2>', unsafe_allow_html=True)
+        eq = c.execute("SELECT responsable, bureau FROM equipes WHERE id=?", (eid,)).fetchone()
+        if eq:
+            st.write(f"**Responsable:** {eq[0]}")
+            st.write(f"**Bureau:** {eq[1]}")
+            nb = c.execute("SELECT COUNT(*) FROM membres WHERE equipe_id=?", (eid,)).fetchone()[0]
+            st.metric("Effectif", f"{nb}/10")
+    
+    elif menu == "Mes membres":
+        st.markdown(f'<h2 style="color:#1A237E;">👤 Membres de {nom_equipe}</h2>', unsafe_allow_html=True)
+        nb = c.execute("SELECT COUNT(*) FROM membres WHERE equipe_id=?", (eid,)).fetchone()[0]
+        st.info(f"{nb}/10 membres")
+        
+        if nb < 10:
+            with st.expander("➕ Ajouter un membre"):
+                with st.form(f"add_membre_eq_{st.session_state['form_counter']}"):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        nom = st.text_input("Nom")
+                        prenom = st.text_input("Prénom")
+                        naissance = st.date_input("Date de naissance", min_value=date(1930,1,1), max_value=date.today())
+                        telephone = st.text_input("Téléphone")
+                    with col2:
+                        whatsapp = st.text_input("WhatsApp")
+                        photo = st.file_uploader("Photo", type=['jpg', 'png', 'jpeg'])
+                    if st.form_submit_button("Ajouter"):
+                        if nom and prenom:
+                            existant = membre_existe_deja(nom, prenom, naissance)
+                            if existant:
+                                st.error(f"❌ Ce membre existe déjà avec le matricule {existant}")
+                            else:
+                                matricule = generer_matricule_unique()
+                                pid = c.execute("SELECT paroisse_id FROM equipes WHERE id=?", (eid,)).fetchone()[0]
+                                c.execute("INSERT INTO membres (matricule, nom, prenom, date_naissance, telephone, whatsapp, date_adhesion, paroisse_id, equipe_id) VALUES (?,?,?,?,?,?,?,?,?)",
+                                          (matricule, nom, prenom, naissance, telephone, whatsapp, date.today(), pid, eid))
+                                mid = c.lastrowid
+                                if photo:
+                                    chemin = sauvegarder_photo(photo, matricule)
+                                    c.execute("UPDATE membres SET photo_path=? WHERE id=?", (chemin, mid))
+                                conn.commit()
+                                st.success(f"✅ Membre ajouté ! Matricule: {matricule}")
+                                st.session_state['form_counter'] = st.session_state.get('form_counter', 0) + 1
+                                st.rerun()
+                        else:
+                            st.error("Le nom et le prénom sont obligatoires")
+        
+        # Liste des membres
+        membres = c.execute("SELECT id, matricule, nom, prenom, telephone, whatsapp, photo_path FROM membres WHERE equipe_id=? ORDER BY nom", (eid,)).fetchall()
+        if membres:
+            for m in membres:
+                with st.expander(f"**{m[2]} {m[3]}** - {m[1]}"):
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        st.write(f"📞 Tél: {m[4]}, WhatsApp: {m[5]}")
+                        if m[6] and os.path.exists(m[6]):
+                            st.image(m[6], width=80)
+                    with col2:
+                        if st.button("✏️ Modifier", key=f"mod_eq_{m[0]}"):
+                            st.session_state['modif_membre_id'] = m[0]
+                            st.rerun()
+                        if st.button("🗑️ Supprimer", key=f"del_eq_{m[0]}"):
+                            c.execute("DELETE FROM membres WHERE id=?", (m[0],))
+                            conn.commit()
+                            st.success("Membre supprimé")
+                            st.rerun()
+        else:
+            st.info("Aucun membre dans cette équipe")
+        
+        # Modification
+        if 'modif_membre_id' in st.session_state:
+            mid = st.session_state['modif_membre_id']
+            membre = c.execute("SELECT matricule, nom, prenom, telephone, whatsapp FROM membres WHERE id=?", (mid,)).fetchone()
+            if membre:
+                st.markdown("---")
+                st.markdown(f"### ✏️ Modifier {membre[1]} {membre[2]}")
+                with st.form("modif_membre_eq"):
+                    new_nom = st.text_input("Nom", value=membre[1])
+                    new_prenom = st.text_input("Prénom", value=membre[2])
+                    new_tel = st.text_input("Téléphone", value=membre[3])
+                    new_whats = st.text_input("WhatsApp", value=membre[4])
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.form_submit_button("💾 Enregistrer"):
+                            c.execute("UPDATE membres SET nom=?, prenom=?, telephone=?, whatsapp=? WHERE id=?",
+                                      (new_nom, new_prenom, new_tel, new_whats, mid))
+                            conn.commit()
+                            del st.session_state['modif_membre_id']
+                            st.success("Membre modifié")
+                            st.rerun()
+                    with col2:
+                        if st.form_submit_button("❌ Annuler"):
+                            del st.session_state['modif_membre_id']
+                            st.rerun()
+    
+    elif menu == "Modifier mon équipe":
+        st.markdown(f'<h2 style="color:#1A237E;">✏️ Modifier {nom_equipe}</h2>', unsafe_allow_html=True)
+        eq = c.execute("SELECT nom_equipe, responsable, bureau FROM equipes WHERE id=?", (eid,)).fetchone()
+        if eq:
+            with st.form("modif_equipe"):
+                nouveau_nom = st.text_input("Nom de l'équipe", value=eq[0])
+                nouveau_resp = st.text_input("Responsable", value=eq[1])
+                nouveau_bureau = st.text_area("Bureau", value=eq[2])
+                if st.form_submit_button("Enregistrer"):
+                    c.execute("UPDATE equipes SET nom_equipe=?, responsable=?, bureau=? WHERE id=?",
+                              (nouveau_nom, nouveau_resp, nouveau_bureau, eid))
+                    conn.commit()
+                    st.success("Équipe modifiée")
+                    st.rerun()

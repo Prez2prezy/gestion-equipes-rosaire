@@ -99,7 +99,7 @@ def sans_accents(texte):
         texte = texte.replace(accent, lettre)
     return texte
 
-def exporter_excel():
+def exporter_excel_diocese():
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         paroisses = c.execute("SELECT id, nom, commune, ville, responsable, bureau FROM paroisses").fetchall()
@@ -337,13 +337,13 @@ if st.session_state['role'] == 'diocese':
                 st.progress(val / max_val if max_val > 0 else 0)
     
     elif menu == "📊 Export Excel":
-        st.markdown('<h2 style="color:#1A237E;">📊 Export des données</h2>', unsafe_allow_html=True)
+        st.markdown('<h2 style="color:#1A237E;">📊 Export des données (Diocèse)</h2>', unsafe_allow_html=True)
         st.info("Exportez toutes les données dans un fichier Excel (3 onglets : Paroisses, Équipes, Membres)")
         nb_membres = c.execute("SELECT COUNT(*) FROM membres").fetchone()[0]
         if nb_membres == 0:
             st.warning("Aucune donnée à exporter pour le moment.")
         else:
-            excel_file = exporter_excel()
+            excel_file = exporter_excel_diocese()
             st.download_button(
                 label="📥 Télécharger l'export Excel",
                 data=excel_file,
@@ -377,7 +377,7 @@ elif st.session_state['role'] == 'paroisse':
     nom_paroisse = c.execute("SELECT nom FROM paroisses WHERE id=?", (pid,)).fetchone()
     nom_paroisse = nom_paroisse[0] if nom_paroisse else "Ma paroisse"
     
-    menu = st.sidebar.radio("Navigation", ["Ma paroisse", "Mes équipes", "Membres", "Statistiques", "Modifier paroisse", "Gérer les accès"])
+    menu = st.sidebar.radio("Navigation", ["Ma paroisse", "Mes équipes", "Membres", "Statistiques", "Modifier paroisse", "Gérer les accès", "📊 Export Excel"])
     
     if menu == "Ma paroisse":
         st.markdown(f'<h2 style="color:#1A237E;">🏘️ {nom_paroisse}</h2>', unsafe_allow_html=True)
@@ -467,15 +467,16 @@ elif st.session_state['role'] == 'paroisse':
                         with col2:
                             whatsapp = st.text_input("WhatsApp")
                             photo = st.file_uploader("Photo", type=['jpg', 'png', 'jpeg'])
+                            date_adhesion = st.date_input("Date d'adhésion", value=date.today(), max_value=date.today())
                         if st.form_submit_button("Ajouter"):
                             if nom and prenom:
                                 existant = membre_existe_deja(nom, prenom, naissance)
                                 if existant:
-                                    st.error(f"❌ Ce membre existe déjà ({existant})")
+                                    st.error(f"❌ Ce membre existe déjà avec le matricule {existant}")
                                 else:
                                     matricule = generer_matricule_unique()
                                     c.execute("INSERT INTO membres (matricule, nom, prenom, date_naissance, telephone, whatsapp, date_adhesion, paroisse_id, equipe_id) VALUES (?,?,?,?,?,?,?,?,?)",
-                                              (matricule, nom, prenom, naissance, telephone, whatsapp, date.today(), pid, eid))
+                                              (matricule, nom, prenom, naissance, telephone, whatsapp, date_adhesion, pid, eid))
                                     mid = c.lastrowid
                                     if photo:
                                         chemin = sauvegarder_photo(photo, matricule)
@@ -484,13 +485,16 @@ elif st.session_state['role'] == 'paroisse':
                                     st.success(f"✅ Membre ajouté ! Matricule: {matricule}")
                                     st.session_state['form_counter'] += 1
                                     st.rerun()
+                            else:
+                                st.error("Le nom et le prénom sont obligatoires")
             
-            membres = c.execute("SELECT id, matricule, nom, prenom, telephone, whatsapp, photo_path FROM membres WHERE equipe_id=? ORDER BY nom", (eid,)).fetchall()
+            membres = c.execute("SELECT id, matricule, nom, prenom, telephone, whatsapp, photo_path, date_adhesion FROM membres WHERE equipe_id=? ORDER BY nom", (eid,)).fetchall()
             for m in membres:
                 with st.expander(f"**{m[2]} {m[3]}** - {m[1]}"):
                     col1, col2 = st.columns([3, 1])
                     with col1:
                         st.write(f"📞 Tél: {m[4]}, WhatsApp: {m[5]}")
+                        st.write(f"📅 Adhésion: {m[7]}")
                         if m[6] and os.path.exists(m[6]):
                             st.image(m[6], width=80)
                     with col2:
@@ -504,7 +508,7 @@ elif st.session_state['role'] == 'paroisse':
             
             if 'modif_membre_id' in st.session_state:
                 mid = st.session_state['modif_membre_id']
-                membre = c.execute("SELECT matricule, nom, prenom, telephone, whatsapp FROM membres WHERE id=?", (mid,)).fetchone()
+                membre = c.execute("SELECT matricule, nom, prenom, telephone, whatsapp, date_adhesion FROM membres WHERE id=?", (mid,)).fetchone()
                 if membre:
                     st.markdown("---")
                     st.markdown(f"### ✏️ Modifier {membre[1]} {membre[2]}")
@@ -513,13 +517,16 @@ elif st.session_state['role'] == 'paroisse':
                         new_prenom = st.text_input("Prénom", value=membre[2])
                         new_tel = st.text_input("Téléphone", value=membre[3])
                         new_whats = st.text_input("WhatsApp", value=membre[4])
+                        new_date_adhesion = st.date_input("Date d'adhésion", value=date.fromisoformat(membre[5]) if isinstance(membre[5], str) else membre[5])
                         if st.form_submit_button("💾 Enregistrer"):
-                            c.execute("UPDATE membres SET nom=?, prenom=?, telephone=?, whatsapp=? WHERE id=?",
-                                      (new_nom, new_prenom, new_tel, new_whats, mid))
+                            c.execute("UPDATE membres SET nom=?, prenom=?, telephone=?, whatsapp=?, date_adhesion=? WHERE id=?",
+                                      (new_nom, new_prenom, new_tel, new_whats, new_date_adhesion, mid))
                             conn.commit()
                             del st.session_state['modif_membre_id']
                             st.success("Membre modifié")
                             st.rerun()
+        else:
+            st.warning("⚠️ Créez d'abord une équipe dans 'Mes équipes'")
     
     elif menu == "Statistiques":
         st.markdown(f'<h2 style="color:#1A237E;">📊 Statistiques de {nom_paroisse}</h2>', unsafe_allow_html=True)
@@ -575,6 +582,37 @@ elif st.session_state['role'] == 'paroisse':
                             c.execute("DELETE FROM utilisateurs WHERE id=?", (user[0],))
                             conn.commit()
                             st.rerun()
+    
+    elif menu == "📊 Export Excel":
+        st.markdown(f'<h2 style="color:#1A237E;">📊 Export des membres de {nom_paroisse}</h2>', unsafe_allow_html=True)
+        st.info("Exportez la liste des membres de votre paroisse au format Excel")
+        
+        membres_paroisse = c.execute('''SELECT m.matricule, m.nom, m.prenom, m.date_naissance, m.telephone, m.whatsapp, 
+                                               m.date_adhesion, e.nom_equipe as equipe
+                                        FROM membres m
+                                        JOIN equipes e ON m.equipe_id = e.id
+                                        WHERE m.paroisse_id = ?
+                                        ORDER BY e.nom_equipe, m.nom''', (pid,)).fetchall()
+        
+        if not membres_paroisse:
+            st.warning("Aucun membre dans votre paroisse pour le moment.")
+        else:
+            df = pd.DataFrame(membres_paroisse, columns=["Matricule", "Nom", "Prénom", "Date naissance", "Téléphone", "WhatsApp", "Date adhésion", "Équipe"])
+            
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                df.to_excel(writer, sheet_name=f"Membres_{nom_paroisse}", index=False)
+            
+            output.seek(0)
+            
+            st.download_button(
+                label="📥 Télécharger l'export Excel",
+                data=output,
+                file_name=f"membres_{nom_paroisse}_{date.today()}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+            
+            st.success(f"✅ {len(membres_paroisse)} membre(s) à exporter")
 
 # ==================== ÉQUIPE ====================
 elif st.session_state['role'] == 'equipe':
@@ -611,16 +649,17 @@ elif st.session_state['role'] == 'equipe':
                     with col2:
                         whatsapp = st.text_input("WhatsApp")
                         photo = st.file_uploader("Photo", type=['jpg', 'png', 'jpeg'])
+                        date_adhesion = st.date_input("Date d'adhésion", value=date.today(), max_value=date.today())
                     if st.form_submit_button("Ajouter"):
                         if nom and prenom:
                             existant = membre_existe_deja(nom, prenom, naissance)
                             if existant:
-                                st.error(f"❌ Ce membre existe déjà ({existant})")
+                                st.error(f"❌ Ce membre existe déjà avec le matricule {existant}")
                             else:
                                 matricule = generer_matricule_unique()
                                 pid = c.execute("SELECT paroisse_id FROM equipes WHERE id=?", (eid,)).fetchone()[0]
                                 c.execute("INSERT INTO membres (matricule, nom, prenom, date_naissance, telephone, whatsapp, date_adhesion, paroisse_id, equipe_id) VALUES (?,?,?,?,?,?,?,?,?)",
-                                          (matricule, nom, prenom, naissance, telephone, whatsapp, date.today(), pid, eid))
+                                          (matricule, nom, prenom, naissance, telephone, whatsapp, date_adhesion, pid, eid))
                                 mid = c.lastrowid
                                 if photo:
                                     chemin = sauvegarder_photo(photo, matricule)
@@ -629,13 +668,16 @@ elif st.session_state['role'] == 'equipe':
                                 st.success(f"✅ Membre ajouté ! Matricule: {matricule}")
                                 st.session_state['form_counter'] += 1
                                 st.rerun()
+                        else:
+                            st.error("Le nom et le prénom sont obligatoires")
         
-        membres = c.execute("SELECT id, matricule, nom, prenom, telephone, whatsapp, photo_path FROM membres WHERE equipe_id=? ORDER BY nom", (eid,)).fetchall()
+        membres = c.execute("SELECT id, matricule, nom, prenom, telephone, whatsapp, photo_path, date_adhesion FROM membres WHERE equipe_id=? ORDER BY nom", (eid,)).fetchall()
         for m in membres:
             with st.expander(f"**{m[2]} {m[3]}** - {m[1]}"):
                 col1, col2 = st.columns([3, 1])
                 with col1:
                     st.write(f"📞 Tél: {m[4]}, WhatsApp: {m[5]}")
+                    st.write(f"📅 Adhésion: {m[7]}")
                     if m[6] and os.path.exists(m[6]):
                         st.image(m[6], width=80)
                 with col2:
@@ -649,7 +691,7 @@ elif st.session_state['role'] == 'equipe':
         
         if 'modif_membre_id' in st.session_state:
             mid = st.session_state['modif_membre_id']
-            membre = c.execute("SELECT matricule, nom, prenom, telephone, whatsapp FROM membres WHERE id=?", (mid,)).fetchone()
+            membre = c.execute("SELECT matricule, nom, prenom, telephone, whatsapp, date_adhesion FROM membres WHERE id=?", (mid,)).fetchone()
             if membre:
                 st.markdown("---")
                 st.markdown(f"### ✏️ Modifier {membre[1]} {membre[2]}")
@@ -658,9 +700,10 @@ elif st.session_state['role'] == 'equipe':
                     new_prenom = st.text_input("Prénom", value=membre[2])
                     new_tel = st.text_input("Téléphone", value=membre[3])
                     new_whats = st.text_input("WhatsApp", value=membre[4])
+                    new_date_adhesion = st.date_input("Date d'adhésion", value=date.fromisoformat(membre[5]) if isinstance(membre[5], str) else membre[5])
                     if st.form_submit_button("💾 Enregistrer"):
-                        c.execute("UPDATE membres SET nom=?, prenom=?, telephone=?, whatsapp=? WHERE id=?",
-                                  (new_nom, new_prenom, new_tel, new_whats, mid))
+                        c.execute("UPDATE membres SET nom=?, prenom=?, telephone=?, whatsapp=?, date_adhesion=? WHERE id=?",
+                                  (new_nom, new_prenom, new_tel, new_whats, new_date_adhesion, mid))
                         conn.commit()
                         del st.session_state['modif_membre_id']
                         st.success("Membre modifié")

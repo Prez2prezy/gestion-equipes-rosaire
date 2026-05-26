@@ -1,4 +1,4 @@
-streamlit
+Streamlit
 Pillow
 pandas
 openyx1

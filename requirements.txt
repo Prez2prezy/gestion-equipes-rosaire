@@ -1,4 +1,3 @@
 sreamlit
 Pillow
-pandas
 openpyxl

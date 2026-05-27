@@ -114,7 +114,7 @@ def verifier_abonnement(membre_id, annee):
 def get_statut_abonnement(membre_id, annee_courante):
     if verifier_abonnement(membre_id, annee_courante):
         type_ = c.execute("SELECT type_abonnement FROM abonnements WHERE membre_id=? AND annee=?", (membre_id, annee_courante)).fetchone()
-        return f"✅ {type_[0].capitalize()}"
+        return f"✅ {type_[0].capitalize()}" if type_ else "✅ Inconnu"
     else:
         return "❌ En retard"
 
@@ -684,7 +684,11 @@ elif st.session_state['role'] == 'paroisse':
             for m in membres:
                 deja = verifier_abonnement(m[0], annee)
                 if deja:
-                    type_ = c.execute("SELECT type_abonnement FROM abonnements WHERE membre_id=? AND annee=?", (m[0], annee)).fetchone()[0]
+                    type_ = c.execute("SELECT type_abonnement FROM abonnements WHERE membre_id=? AND annee=?", (m[0], annee)).fetchone()
+                    if type_:
+                        type_ = type_[0]
+                    else:
+                        type_ = "abonnement"
                     st.info(f"{m[1]} {m[2]} ({m[3]}) – ✅ Déjà {type_}")
                 else:
                     with st.expander(f"{m[1]} {m[2]} ({m[3]}) – ❌ Non enregistré"):
@@ -882,7 +886,11 @@ elif st.session_state['role'] == 'equipe':
         for m in membres:
             deja = verifier_abonnement(m[0], annee)
             if deja:
-                type_ = c.execute("SELECT type_abonnement FROM abonnements WHERE membre_id=? AND annee=?", (m[0], annee)).fetchone()[0]
+                type_ = c.execute("SELECT type_abonnement FROM abonnements WHERE membre_id=? AND annee=?", (m[0], annee)).fetchone()
+                if type_:
+                    type_ = type_[0]
+                else:
+                    type_ = "abonnement"
                 st.info(f"{m[1]} {m[2]} ({m[3]}) – ✅ {type_}")
             else:
                 with st.expander(f"{m[1]} {m[2]} ({m[3]}) – ❌ Non enregistré"):

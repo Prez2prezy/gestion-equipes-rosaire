@@ -1018,7 +1018,7 @@ elif st.session_state['role'] == 'equipe':
                     with st.form(f"edit_arch_{arch_id}"):
                         new_situation = st.selectbox("Situation", ["Déplacé", "Radié", "Défunt"],
                                                      index=["Déplacé","Radié","Défunt"].index(situation),
-                                                     format_func=lambda x: {"Déplacé": "📤 Déplacé", "Radié": "🚫 Radié", "Défunt": "🕊️ Défunt"}[x])
+                                                     format_func=lambda x: {"Déplacé": "📤 a déménagé", "Radié": "🚫 Inconnu(e)", "Défunt": "🕊️ est décédé(e)"}[x])
                         col1, col2 = st.columns(2)
                         with col1:
                             new_date_debut = st.date_input("Début", value=date_debut)

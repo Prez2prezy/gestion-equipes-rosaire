@@ -979,26 +979,44 @@ elif st.session_state['role'] == 'equipe':
             WHERE a.equipe_id = ?
             ORDER BY a.date_fin DESC
         ''', (eid,)).fetchall()
-        
-        # --- Ajout d'une archive (à partir d'un membre actif) ---
-        with st.expander("➕ Archiver un membre de l'équipe"):
-            if not membres_actifs:
-                st.warning("Aucun membre actif à archiver.")
-            else:
-                with st.form("archive_membre"):
-                    membre_choisi = st.selectbox("Membre à archiver", membres_actifs, format_func=lambda x: f"{x[1]} {x[2]} ({x[3]})")
-                    situation = st.radio("Situation", ["Déplacé", "Radié", "Défunt"],
-                                         format_func=lambda x: {"Déplacé": "📤 Déplacé (autre diocèse)", "Radié": "🚫 Radié", "Défunt": "🕊️ Défunt"}[x])
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        date_debut = st.date_input("Date de début (Oct de l'année)", value=date.today().replace(month=10, day=1), min_value=date(2000,1,1))
-                    with col2:
-                        date_fin = st.date_input("Date de fin (Oct de l'année)", value=date.today().replace(month=10, day=1), min_value=date(2000,1,1))
-                    commentaire = st.text_area("Commentaire (optionnel)")
-                    if st.form_submit_button("Archiver"):
+
+elif menu == "Archives":
+    st.markdown(f'<h2 style="color:#1A237E;">📦 Archives de {nom_equipe}</h2>', unsafe_allow_html=True)
+    # Membres actifs de l'équipe
+    membres_actifs = c.execute("SELECT id, nom, prenom, matricule FROM membres WHERE equipe_id=? AND statut='actif' ORDER BY nom", (eid,)).fetchall()
+    # Archives existantes
+    archives_equipe = c.execute('''
+        SELECT a.id, m.nom, m.prenom, m.matricule, a.situation, a.date_debut, a.date_fin, a.commentaire, m.id as membre_id
+        FROM archives a
+        JOIN membres m ON a.membre_id = m.id
+        WHERE a.equipe_id = ?
+        ORDER BY a.date_fin DESC
+    ''', (eid,)).fetchall()
+    
+    # --- Ajout d'une archive ---
+    with st.expander("➕ Archiver un membre de l'équipe"):
+        if not membres_actifs:
+            st.warning("Aucun membre actif à archiver.")
+        else:
+            with st.form("archive_membre"):
+                membre_choisi = st.selectbox("Membre à archiver", membres_actifs, format_func=lambda x: f"{x[1]} {x[2]} ({x[3]})")
+                situation = st.radio("Situation", ["Déplacé", "Radié", "Défunt"])
+                col1, col2 = st.columns(2)
+                with col1:
+                    annee_debut = st.number_input("Année de début (Oct)", min_value=2000, max_value=date.today().year+5, value=date.today().year, step=1)
+                with col2:
+                    annee_fin = st.number_input("Année de fin (Oct)", min_value=2000, max_value=date.today().year+10, value=date.today().year+1, step=1)
+                commentaire = st.text_area("Commentaire (optionnel)")
+                
+                if st.form_submit_button("Archiver"):
+                    # Validation : l'année de fin doit être strictement supérieure à l'année de début
+                    if annee_fin <= annee_debut:
+                        st.error("❌ L'année de fin doit être au moins un an après l'année de début.")
+                    else:
+                        date_debut = date(annee_debut, 10, 1)
+                        date_fin = date(annee_fin, 10, 1)
                         # Mettre à jour le statut du membre
                         c.execute("UPDATE membres SET statut='archive' WHERE id=?", (membre_choisi[0],))
-                        # Créer l'archive
                         paroisse_id = c.execute("SELECT paroisse_id FROM equipes WHERE id=?", (eid,)).fetchone()[0]
                         c.execute('''INSERT INTO archives (membre_id, situation, date_debut, date_fin, commentaire, auteur_id, auteur_nom, auteur_role, paroisse_id, equipe_id)
                                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
@@ -1007,41 +1025,70 @@ elif st.session_state['role'] == 'equipe':
                         conn.commit()
                         st.success(f"✅ {membre_choisi[1]} {membre_choisi[2]} archivé.")
                         st.rerun()
-        
-        # --- Gestion des archives existantes ---
-        if archives_equipe:
-            st.subheader("✏️ Gérer les archives de votre équipe")
-            for arch in archives_equipe:
-                arch_id, nom, prenom, matricule, situation, date_debut, date_fin, commentaire, membre_id = arch
-                duree = (date_fin - date_debut).days // 365 if date_debut and date_fin else 0
-                with st.expander(f"{nom} {prenom} ({matricule}) - {situation} - {duree} an(s) - {periode_affichage(date_debut.year)}"):
-                    with st.form(f"edit_arch_{arch_id}"):
-                        new_situation = st.selectbox("Situation", ["Déplacé", "Radié", "Défunt"],
-                                                     index=["Déplacé","Radié","Défunt"].index(situation),
-                                                     format_func=lambda x: {"Déplacé": "📤 a déménagé", "Radié": "🚫 Inconnu(e)", "Défunt": "🕊️ est décédé(e)"}[x])
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            new_date_debut = st.date_input("Début", value=date_debut)
-                        with col2:
-                            new_date_fin = st.date_input("Fin", value=date_fin)
-                        new_comment = st.text_area("Commentaire", value=commentaire or "")
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            if st.form_submit_button("💾 Mettre à jour"):
+    
+    # --- Gestion des archives existantes ---
+    if archives_equipe:
+        st.subheader("✏️ Gérer les archives de votre équipe")
+        for arch in archives_equipe:
+            # Conversion sécurisée des dates (peuvent être des chaînes ou des objets date)
+            arch_id, nom, prenom, matricule, situation, date_debut_raw, date_fin_raw, commentaire, membre_id = arch
+            try:
+                if isinstance(date_debut_raw, str):
+                    date_debut = date.fromisoformat(date_debut_raw)
+                else:
+                    date_debut = date_debut_raw
+                if isinstance(date_fin_raw, str):
+                    date_fin = date.fromisoformat(date_fin_raw)
+                else:
+                    date_fin = date_fin_raw
+            except:
+                date_debut = None
+                date_fin = None
+            
+            if date_debut and date_fin:
+                duree = (date_fin - date_debut).days // 365
+                annee_debut_affiche = date_debut.year
+                annee_fin_affiche = date_fin.year
+            else:
+                duree = 0
+                annee_debut_affiche = "?"
+                annee_fin_affiche = "?"
+            
+            with st.expander(f"{nom} {prenom} ({matricule}) - {situation} - {duree} an(s) - Oct {annee_debut_affiche} – Oct {annee_fin_affiche}"):
+                with st.form(f"edit_arch_{arch_id}"):
+                    new_situation = st.selectbox("Situation", ["Déplacé", "Radié", "Défunt"],
+                                                 index=["Déplacé","Radié","Défunt"].index(situation) if situation in ["Déplacé","Radié","Défunt"] else 0)
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        new_annee_debut = st.number_input("Année début (Oct)", min_value=2000, max_value=date.today().year+5,
+                                                           value=date_debut.year if date_debut else date.today().year, step=1)
+                    with col2:
+                        new_annee_fin = st.number_input("Année fin (Oct)", min_value=2000, max_value=date.today().year+10,
+                                                        value=date_fin.year if date_fin else date.today().year+1, step=1)
+                    new_comment = st.text_area("Commentaire", value=commentaire or "")
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.form_submit_button("💾 Mettre à jour"):
+                            if new_annee_fin <= new_annee_debut:
+                                st.error("L'année de fin doit être au moins un an après l'année de début.")
+                            else:
+                                new_date_debut = date(new_annee_debut, 10, 1)
+                                new_date_fin = date(new_annee_fin, 10, 1)
                                 c.execute("UPDATE archives SET situation=?, date_debut=?, date_fin=?, commentaire=? WHERE id=?",
                                           (new_situation, new_date_debut, new_date_fin, new_comment, arch_id))
                                 conn.commit()
                                 st.success("Archive modifiée")
                                 st.rerun()
-                        with col2:
-                            if situation in ("Déplacé", "Radié"):
-                                if st.form_submit_button("🔄 Réintégrer (devient actif)"):
-                                    c.execute("UPDATE membres SET statut='actif' WHERE id=?", (membre_id,))
-                                    c.execute("DELETE FROM archives WHERE id=?", (arch_id,))
-                                    conn.commit()
-                                    st.success(f"{nom} {prenom} a été réintégré(e).")
-                                    st.rerun()
-                            else:
-                                st.info("Un défunt ne peut pas être réintégré.")
-        else:
-            st.info("Aucune archive pour cette équipe.")
+                    with col2:
+                        if situation in ("Déplacé", "Radié"):
+                            if st.form_submit_button("🔄 Réintégrer (devient actif)"):
+                                c.execute("UPDATE membres SET statut='actif' WHERE id=?", (membre_id,))
+                                c.execute("DELETE FROM archives WHERE id=?", (arch_id,))
+                                conn.commit()
+                                st.success(f"{nom} {prenom} a été réintégré(e).")
+                                st.rerun()
+                        else:
+                            st.info("Un défunt ne peut pas être réintégré.")
+    else:
+        st.info("Aucune archive pour cette équipe.")

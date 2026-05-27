@@ -9,8 +9,6 @@ from PIL import Image
 import shutil
 import pandas as pd
 import io
-import csv
-from io import StringIO
 import urllib.parse
 
 # --- Configuration de la page ---
@@ -92,6 +90,14 @@ def supprimer_photo(photo_path):
     if photo_path and os.path.exists(photo_path):
         os.remove(photo_path)
 
+def archiver_membre(membre_id, situation, date_debut, date_fin, commentaire, auteur_id, auteur_nom, auteur_role, paroisse_id, equipe_id):
+    """Archive un membre : met à jour son statut et ajoute une entrée dans archives"""
+    c.execute("UPDATE membres SET statut='archive' WHERE id=?", (membre_id,))
+    c.execute('''INSERT INTO archives (membre_id, situation, date_debut, date_fin, commentaire, auteur_id, auteur_nom, auteur_role, paroisse_id, equipe_id)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+              (membre_id, situation, date_debut, date_fin, commentaire, auteur_id, auteur_nom, auteur_role, paroisse_id, equipe_id))
+    conn.commit()
+
 # --- Fonctions pour les abonnements ---
 def enregistrer_abonnement(membre_id, annee_debut, montant=0, type_abonnement='abonnement'):
     date_paiement = date.today()
@@ -121,6 +127,17 @@ def afficher_situation(situation):
         "Défunt": "est décédé(e)"
     }
     return mapping.get(situation, situation)
+
+def convertir_en_date(valeur):
+    """Convertit une chaîne ISO ou un objet date en objet date."""
+    if isinstance(valeur, date):
+        return valeur
+    if isinstance(valeur, str):
+        try:
+            return date.fromisoformat(valeur)
+        except:
+            return None
+    return None
 
 # --- Fonctions WhatsApp ---
 def lien_whatsapp(numero, message):
@@ -197,49 +214,54 @@ def afficher_rappels_reabonnement_whatsapp(annee_debut, equipe_id=None):
     else:
         st.success(f"🎉 Tous les membres sont à jour pour la période {periode_affichage(annee_debut)} !")
 
-# --- Export Excel ---
+# --- Export Excel (avec gestion d'erreur du moteur) ---
 def exporter_excel_diocese():
     output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        paroisses = c.execute("SELECT id, nom, commune, ville, responsable, bureau FROM paroisses").fetchall()
-        if paroisses:
-            df = pd.DataFrame(paroisses, columns=["ID", "Nom", "Commune", "Ville", "Responsable", "Bureau"])
-            df.to_excel(writer, sheet_name="Paroisses", index=False)
-        equipes = c.execute('''SELECT e.id, e.nom_equipe, e.responsable, e.bureau, p.nom as paroisse, e.max_membres
-                               FROM equipes e JOIN paroisses p ON e.paroisse_id = p.id''').fetchall()
-        if equipes:
-            df = pd.DataFrame(equipes, columns=["ID", "Nom équipe", "Responsable", "Bureau", "Paroisse", "Max membres"])
-            df.to_excel(writer, sheet_name="Equipes", index=False)
-        membres = c.execute('''SELECT m.matricule, m.nom, m.prenom, m.date_naissance, m.whatsapp, m.date_adhesion,
-                                      p.nom as paroisse, e.nom_equipe as equipe
-                               FROM membres m
-                               JOIN paroisses p ON m.paroisse_id = p.id
-                               JOIN equipes e ON m.equipe_id = e.id
-                               WHERE m.statut = 'actif'
-                               ORDER BY p.nom, e.nom_equipe, m.nom''').fetchall()
-        if membres:
-            df = pd.DataFrame(membres, columns=["Matricule", "Nom", "Prénom", "Date naissance", "WhatsApp", "Date adhésion", "Paroisse", "Équipe"])
-            df.to_excel(writer, sheet_name="Membres actifs", index=False)
-        abonnements = c.execute('''SELECT a.id, m.matricule, m.nom, m.prenom, a.annee_debut, a.date_paiement, a.montant, a.type_abonnement
-                                   FROM abonnements a
-                                   JOIN membres m ON a.membre_id = m.id
-                                   ORDER BY a.annee_debut DESC, m.nom''').fetchall()
-        if abonnements:
-            df = pd.DataFrame(abonnements, columns=["ID", "Matricule", "Nom", "Prénom", "Année début", "Date paiement", "Montant", "Type"])
-            df["Période"] = df["Année début"].apply(lambda x: f"Oct {x} – Oct {x+1}")
-            df.to_excel(writer, sheet_name="Abonnements", index=False)
-        archives = c.execute('''SELECT m.matricule, m.nom, m.prenom, a.situation, a.date_debut, a.date_fin, a.commentaire,
-                                       p.nom as paroisse, e.nom_equipe as equipe
-                                FROM archives a
-                                JOIN membres m ON a.membre_id = m.id
-                                LEFT JOIN equipes e ON a.equipe_id = e.id
-                                LEFT JOIN paroisses p ON e.paroisse_id = p.id
-                                ORDER BY a.date_fin DESC''').fetchall()
-        if archives:
-            df = pd.DataFrame(archives, columns=["Matricule", "Nom", "Prénom", "Situation", "Début", "Fin", "Commentaire", "Paroisse", "Équipe"])
-            df.to_excel(writer, sheet_name="Archives", index=False)
-    output.seek(0)
-    return output
+    try:
+        # On tente d'abord openpyxl, sinon xlsxwriter, sinon excel
+        with pd.ExcelWriter(output, engine=None) as writer:
+            paroisses = c.execute("SELECT id, nom, commune, ville, responsable, bureau FROM paroisses").fetchall()
+            if paroisses:
+                df = pd.DataFrame(paroisses, columns=["ID", "Nom", "Commune", "Ville", "Responsable", "Bureau"])
+                df.to_excel(writer, sheet_name="Paroisses", index=False)
+            equipes = c.execute('''SELECT e.id, e.nom_equipe, e.responsable, e.bureau, p.nom as paroisse, e.max_membres
+                                   FROM equipes e JOIN paroisses p ON e.paroisse_id = p.id''').fetchall()
+            if equipes:
+                df = pd.DataFrame(equipes, columns=["ID", "Nom équipe", "Responsable", "Bureau", "Paroisse", "Max membres"])
+                df.to_excel(writer, sheet_name="Equipes", index=False)
+            membres = c.execute('''SELECT m.matricule, m.nom, m.prenom, m.date_naissance, m.whatsapp, m.date_adhesion,
+                                          p.nom as paroisse, e.nom_equipe as equipe
+                                   FROM membres m
+                                   JOIN paroisses p ON m.paroisse_id = p.id
+                                   JOIN equipes e ON m.equipe_id = e.id
+                                   WHERE m.statut = 'actif'
+                                   ORDER BY p.nom, e.nom_equipe, m.nom''').fetchall()
+            if membres:
+                df = pd.DataFrame(membres, columns=["Matricule", "Nom", "Prénom", "Date naissance", "WhatsApp", "Date adhésion", "Paroisse", "Équipe"])
+                df.to_excel(writer, sheet_name="Membres actifs", index=False)
+            abonnements = c.execute('''SELECT a.id, m.matricule, m.nom, m.prenom, a.annee_debut, a.date_paiement, a.montant, a.type_abonnement
+                                       FROM abonnements a
+                                       JOIN membres m ON a.membre_id = m.id
+                                       ORDER BY a.annee_debut DESC, m.nom''').fetchall()
+            if abonnements:
+                df = pd.DataFrame(abonnements, columns=["ID", "Matricule", "Nom", "Prénom", "Année début", "Date paiement", "Montant", "Type"])
+                df["Période"] = df["Année début"].apply(lambda x: f"Oct {x} – Oct {x+1}")
+                df.to_excel(writer, sheet_name="Abonnements", index=False)
+            archives = c.execute('''SELECT m.matricule, m.nom, m.prenom, a.situation, a.date_debut, a.date_fin, a.commentaire,
+                                           p.nom as paroisse, e.nom_equipe as equipe
+                                    FROM archives a
+                                    JOIN membres m ON a.membre_id = m.id
+                                    LEFT JOIN equipes e ON a.equipe_id = e.id
+                                    LEFT JOIN paroisses p ON e.paroisse_id = p.id
+                                    ORDER BY a.date_fin DESC''').fetchall()
+            if archives:
+                df = pd.DataFrame(archives, columns=["Matricule", "Nom", "Prénom", "Situation", "Début", "Fin", "Commentaire", "Paroisse", "Équipe"])
+                df.to_excel(writer, sheet_name="Archives", index=False)
+        output.seek(0)
+        return output
+    except Exception as e:
+        st.error(f"Erreur lors de la création de l'Excel : {e}. Assurez-vous d'avoir installé 'openpyxl' ou 'xlsxwriter'.")
+        return None
 
 # --- Création des tables ---
 c.execute('''CREATE TABLE IF NOT EXISTS diocese (id INTEGER PRIMARY KEY, nom TEXT, responsable TEXT, bureau TEXT)''')
@@ -251,26 +273,17 @@ c.execute('''CREATE TABLE IF NOT EXISTS abonnements (id INTEGER PRIMARY KEY, mem
 c.execute('''CREATE TABLE IF NOT EXISTS archives (id INTEGER PRIMARY KEY, membre_id INTEGER, situation TEXT, date_debut DATE, date_fin DATE, commentaire TEXT, auteur_id INTEGER, auteur_nom TEXT, auteur_role TEXT, paroisse_id INTEGER, equipe_id INTEGER)''')
 conn.commit()
 
-# --- Migrations : ajout des colonnes manquantes (sécurisé) ---
-try:
-    c.execute("ALTER TABLE membres ADD COLUMN statut TEXT DEFAULT 'actif'")
-    conn.commit()
+# --- Migrations : ajout des colonnes manquantes ---
+for col in ['statut', 'annee_debut', 'situation', 'date_debut', 'date_fin']:
+    try: c.execute(f"ALTER TABLE membres ADD COLUMN {col}"); conn.commit()
+    except: pass
+try: c.execute("ALTER TABLE abonnements ADD COLUMN annee_debut INTEGER"); conn.commit()
 except: pass
-try:
-    c.execute("ALTER TABLE abonnements ADD COLUMN annee_debut INTEGER")
-    conn.commit()
+try: c.execute("ALTER TABLE archives ADD COLUMN situation TEXT"); conn.commit()
 except: pass
-try:
-    c.execute("ALTER TABLE archives ADD COLUMN situation TEXT")
-    conn.commit()
+try: c.execute("ALTER TABLE archives ADD COLUMN date_debut DATE"); conn.commit()
 except: pass
-try:
-    c.execute("ALTER TABLE archives ADD COLUMN date_debut DATE")
-    conn.commit()
-except: pass
-try:
-    c.execute("ALTER TABLE archives ADD COLUMN date_fin DATE")
-    conn.commit()
+try: c.execute("ALTER TABLE archives ADD COLUMN date_fin DATE"); conn.commit()
 except: pass
 
 # --- Initialisation ---
@@ -283,6 +296,12 @@ c.execute("SELECT COUNT(*) FROM utilisateurs WHERE role='diocese'")
 if c.fetchone()[0] == 0:
     c.execute("INSERT INTO utilisateurs (username, password, role, diocese_id) VALUES (?, ?, ?, ?)", ("diocese", hash_password("admin123"), "diocese", 1))
     conn.commit()
+
+# Vérifier si le mot de passe diocèse est encore le défaut
+if st.session_state.get('logged_in') and st.session_state.get('username') == 'diocese':
+    user = c.execute("SELECT password FROM utilisateurs WHERE username='diocese'").fetchone()
+    if user and user[0] == hash_password("admin123"):
+        st.sidebar.warning("⚠️ Mot de passe par défaut. Veuillez le changer dans 'Gérer les accès'.")
 
 if 'form_counter' not in st.session_state:
     st.session_state['form_counter'] = 0
@@ -500,7 +519,8 @@ if st.session_state['role'] == 'diocese':
             st.warning("Aucune donnée à exporter.")
         else:
             excel_file = exporter_excel_diocese()
-            st.download_button("📥 Télécharger l'export Excel", data=excel_file, file_name=f"export_rosaire_{date.today()}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            if excel_file:
+                st.download_button("📥 Télécharger l'export Excel", data=excel_file, file_name=f"export_rosaire_{date.today()}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     
     # Archives (consultation seule)
     elif menu == "📦 Archives":
@@ -520,13 +540,16 @@ if st.session_state['role'] == 'diocese':
             for a in archives:
                 situation_affichee = afficher_situation(a[3])
                 icone = {"Déplacé":"📤","Radié":"🚫","Défunt":"🕊️"}.get(a[3],"📌")
-                duree = (date.fromisoformat(a[5]) - date.fromisoformat(a[4])).days // 365 if a[4] and a[5] else 0
+                # Conversion sécurisée des dates
+                date_debut_obj = convertir_en_date(a[4])
+                date_fin_obj = convertir_en_date(a[5])
+                duree = (date_fin_obj - date_debut_obj).days // 365 if (date_debut_obj and date_fin_obj) else 0
                 with st.expander(f"{icone} {a[1]} {a[2]} ({a[0]}) – {situation_affichee} – {a[5]}"):
                     st.write(f"Ajouté par : {a[9]}")
                     st.write(f"Paroisse : {a[7]}")
                     st.write(f"Équipe : {a[8]}")
-                    if a[4] and a[5]:
-                        st.write(f"Période : Oct {a[4].year} – Oct {a[5].year} ({duree} an(s))")
+                    if date_debut_obj and date_fin_obj:
+                        st.write(f"Période : Oct {date_debut_obj.year} – Oct {date_fin_obj.year} ({duree} an(s))")
                     if a[6]:
                         st.write(f"Commentaire : {a[6]}")
     
@@ -647,10 +670,39 @@ elif st.session_state['role'] == 'paroisse':
                         if st.button("✏️ Modifier", key=f"mod_{m[0]}"):
                             st.session_state['modif_membre_id'] = m[0]
                             st.rerun()
-                        if st.button("🗑️ Supprimer", key=f"del_{m[0]}"):
-                            c.execute("DELETE FROM membres WHERE id=?", (m[0],))
-                            conn.commit()
+                        # Remplacer le bouton Supprimer par Archiver avec confirmation
+                        if st.button("📦 Archiver", key=f"arch_{m[0]}"):
+                            st.session_state['archive_membre_id'] = m[0]
                             st.rerun()
+            # Gestion de l'archivage
+            if 'archive_membre_id' in st.session_state:
+                mid_arch = st.session_state['archive_membre_id']
+                membre_arch = c.execute("SELECT nom, prenom, matricule, date_adhesion FROM membres WHERE id=?", (mid_arch,)).fetchone()
+                if membre_arch:
+                    st.warning(f"Archivage de {membre_arch[0]} {membre_arch[1]} ({membre_arch[2]})")
+                    with st.form("form_archive"):
+                        situation = st.radio("Situation", ["Déplacé", "Radié", "Défunt"])
+                        annee_debut_arch = st.number_input("Année de début (Oct)", min_value=2000, max_value=date.today().year+5, value=date.today().year, step=1)
+                        annee_fin_arch = st.number_input("Année de fin (Oct)", min_value=2000, max_value=date.today().year+10, value=date.today().year+1, step=1)
+                        commentaire = st.text_area("Commentaire")
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.form_submit_button("Confirmer l'archivage"):
+                                if annee_fin_arch <= annee_debut_arch:
+                                    st.error("L'année de fin doit être après l'année de début.")
+                                else:
+                                    date_debut_arch = date(annee_debut_arch, 10, 1)
+                                    date_fin_arch = date(annee_fin_arch, 10, 1)
+                                    archiver_membre(mid_arch, situation, date_debut_arch, date_fin_arch, commentaire,
+                                                    st.session_state['user_id'], st.session_state['username'], 'paroisse', pid, eid)
+                                    del st.session_state['archive_membre_id']
+                                    st.success("Membre archivé")
+                                    st.rerun()
+                        with col2:
+                            if st.form_submit_button("Annuler"):
+                                del st.session_state['archive_membre_id']
+                                st.rerun()
+            # Modification de membre
             if 'modif_membre_id' in st.session_state:
                 mid = st.session_state['modif_membre_id']
                 membre = c.execute("SELECT nom, prenom, whatsapp, photo_path FROM membres WHERE id=?", (mid,)).fetchone()
@@ -661,17 +713,24 @@ elif st.session_state['role'] == 'paroisse':
                         new_prenom = st.text_input("Prénom", value=membre[1])
                         new_whatsapp = st.text_input("WhatsApp", value=membre[2])
                         new_photo = st.file_uploader("Nouvelle photo", type=['jpg','png','jpeg'])
-                        if st.form_submit_button("Enregistrer"):
-                            c.execute("UPDATE membres SET nom=?, prenom=?, whatsapp=? WHERE id=?", (new_nom, new_prenom, new_whatsapp, mid))
-                            if new_photo:
-                                if membre[3] and os.path.exists(membre[3]):
-                                    os.remove(membre[3])
-                                chemin = sauvegarder_photo(new_photo, c.execute("SELECT matricule FROM membres WHERE id=?", (mid,)).fetchone()[0])
-                                c.execute("UPDATE membres SET photo_path=? WHERE id=?", (chemin, mid))
-                            conn.commit()
-                            del st.session_state['modif_membre_id']
-                            st.success("Membre modifié")
-                            st.rerun()
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.form_submit_button("Enregistrer"):
+                                c.execute("UPDATE membres SET nom=?, prenom=?, whatsapp=? WHERE id=?", (new_nom, new_prenom, new_whatsapp, mid))
+                                if new_photo:
+                                    if membre[3] and os.path.exists(membre[3]):
+                                        os.remove(membre[3])
+                                    matricule = c.execute("SELECT matricule FROM membres WHERE id=?", (mid,)).fetchone()[0]
+                                    chemin = sauvegarder_photo(new_photo, matricule)
+                                    c.execute("UPDATE membres SET photo_path=? WHERE id=?", (chemin, mid))
+                                conn.commit()
+                                del st.session_state['modif_membre_id']
+                                st.success("Membre modifié")
+                                st.rerun()
+                        with col2:
+                            if st.form_submit_button("Annuler"):
+                                del st.session_state['modif_membre_id']
+                                st.rerun()
     
     # Statistiques
     elif menu == "Statistiques":
@@ -701,18 +760,14 @@ elif st.session_state['role'] == 'paroisse':
                     st.info(f"{m[1]} {m[2]} ({m[3]}) – ✅ Déjà {type_}")
                 else:
                     with st.expander(f"{m[1]} {m[2]} ({m[3]}) – ❌ Non enregistré"):
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            abo = st.checkbox("📝 Abonnement", key=f"abo_{m[0]}_{annee_debut}")
-                        with col2:
-                            reabo = st.checkbox("🔄 Réabonnement", key=f"reabo_{m[0]}_{annee_debut}")
-                        if abo or reabo:
-                            montant = st.number_input("Montant (FCFA)", min_value=0, value=1000, step=500, key=f"mont_{m[0]}_{annee_debut}")
-                            if st.button("Enregistrer", key=f"btn_{m[0]}_{annee_debut}"):
-                                type_abo = "abonnement" if abo else "reabonnement"
-                                enregistrer_abonnement(m[0], annee_debut, montant, type_abo)
-                                st.success(f"{type_abo} enregistré pour {m[1]} {m[2]}")
-                                st.rerun()
+                        # Remplacement des checkboxes par un radio
+                        type_abo = st.radio("Type", ["Abonnement", "Réabonnement"], key=f"type_{m[0]}_{annee_debut}", horizontal=True)
+                        montant = st.number_input("Montant (FCFA)", min_value=0, value=1000, step=500, key=f"mont_{m[0]}_{annee_debut}")
+                        if st.button("Enregistrer", key=f"btn_{m[0]}_{annee_debut}"):
+                            type_val = "abonnement" if type_abo == "Abonnement" else "reabonnement"
+                            enregistrer_abonnement(m[0], annee_debut, montant, type_val)
+                            st.success(f"{type_val} enregistré pour {m[1]} {m[2]}")
+                            st.rerun()
             st.markdown("---")
             tab_liste = st.tabs(["📝 Abonnés", "🔄 Réabonnés", "❌ Non enregistrés"])
             with tab_liste[0]:
@@ -767,10 +822,13 @@ elif st.session_state['role'] == 'paroisse':
         if membres:
             df = pd.DataFrame(membres, columns=["Matricule", "Nom", "Prénom", "Date naissance", "WhatsApp", "Date adhésion", "Équipe"])
             output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                df.to_excel(writer, sheet_name=f"Membres_{nom_paroisse}", index=False)
-            output.seek(0)
-            st.download_button("📥 Télécharger Excel", data=output, file_name=f"membres_{nom_paroisse}_{date.today()}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            try:
+                with pd.ExcelWriter(output, engine=None) as writer:
+                    df.to_excel(writer, sheet_name=f"Membres_{nom_paroisse}", index=False)
+                output.seek(0)
+                st.download_button("📥 Télécharger Excel", data=output, file_name=f"membres_{nom_paroisse}_{date.today()}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            except Exception as e:
+                st.error(f"Erreur lors de la création de l'Excel : {e}")
         else:
             st.warning("Aucun membre actif")
     
@@ -792,12 +850,14 @@ elif st.session_state['role'] == 'paroisse':
             for a in archives:
                 situation_affichee = afficher_situation(a[3])
                 icone = {"Déplacé":"📤","Radié":"🚫","Défunt":"🕊️"}.get(a[3],"📌")
-                duree = (date.fromisoformat(a[5]) - date.fromisoformat(a[4])).days // 365 if a[4] and a[5] else 0
+                date_debut_obj = convertir_en_date(a[4])
+                date_fin_obj = convertir_en_date(a[5])
+                duree = (date_fin_obj - date_debut_obj).days // 365 if (date_debut_obj and date_fin_obj) else 0
                 with st.expander(f"{icone} {a[1]} {a[2]} ({a[0]}) – {situation_affichee} – {a[5]}"):
                     st.write(f"Ajouté par : {a[8]}")
                     st.write(f"Équipe : {a[7]}")
-                    if a[4] and a[5]:
-                        st.write(f"Période : Oct {a[4].year} – Oct {a[5].year} ({duree} an(s))")
+                    if date_debut_obj and date_fin_obj:
+                        st.write(f"Période : Oct {date_debut_obj.year} – Oct {date_fin_obj.year} ({duree} an(s))")
                     if a[6]:
                         st.write(f"Commentaire : {a[6]}")
 
@@ -863,10 +923,40 @@ elif st.session_state['role'] == 'equipe':
                     if st.button("✏️ Modifier", key=f"mod_eq_{m[0]}"):
                         st.session_state['modif_membre_id'] = m[0]
                         st.rerun()
-                    if st.button("🗑️ Supprimer", key=f"del_eq_{m[0]}"):
-                        c.execute("DELETE FROM membres WHERE id=?", (m[0],))
-                        conn.commit()
+                    # Remplacer Supprimer par Archiver
+                    if st.button("📦 Archiver", key=f"arch_eq_{m[0]}"):
+                        st.session_state['archive_membre_id'] = m[0]
                         st.rerun()
+        # Gestion archivage
+        if 'archive_membre_id' in st.session_state:
+            mid_arch = st.session_state['archive_membre_id']
+            membre_arch = c.execute("SELECT nom, prenom, matricule, date_adhesion FROM membres WHERE id=?", (mid_arch,)).fetchone()
+            if membre_arch:
+                st.warning(f"Archivage de {membre_arch[0]} {membre_arch[1]} ({membre_arch[2]})")
+                with st.form("form_archive_eq"):
+                    situation = st.radio("Situation", ["Déplacé", "Radié", "Défunt"])
+                    annee_debut_arch = st.number_input("Année de début (Oct)", min_value=2000, max_value=date.today().year+5, value=date.today().year, step=1)
+                    annee_fin_arch = st.number_input("Année de fin (Oct)", min_value=2000, max_value=date.today().year+10, value=date.today().year+1, step=1)
+                    commentaire = st.text_area("Commentaire")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.form_submit_button("Confirmer l'archivage"):
+                            if annee_fin_arch <= annee_debut_arch:
+                                st.error("L'année de fin doit être après l'année de début.")
+                            else:
+                                date_debut_arch = date(annee_debut_arch, 10, 1)
+                                date_fin_arch = date(annee_fin_arch, 10, 1)
+                                paroisse_id = c.execute("SELECT paroisse_id FROM equipes WHERE id=?", (eid,)).fetchone()[0]
+                                archiver_membre(mid_arch, situation, date_debut_arch, date_fin_arch, commentaire,
+                                                st.session_state['user_id'], st.session_state['username'], 'equipe', paroisse_id, eid)
+                                del st.session_state['archive_membre_id']
+                                st.success("Membre archivé")
+                                st.rerun()
+                    with col2:
+                        if st.form_submit_button("Annuler"):
+                            del st.session_state['archive_membre_id']
+                            st.rerun()
+        # Modification de membre
         if 'modif_membre_id' in st.session_state:
             mid = st.session_state['modif_membre_id']
             membre = c.execute("SELECT nom, prenom, whatsapp, photo_path FROM membres WHERE id=?", (mid,)).fetchone()
@@ -876,18 +966,24 @@ elif st.session_state['role'] == 'equipe':
                     new_prenom = st.text_input("Prénom", value=membre[1])
                     new_whatsapp = st.text_input("WhatsApp", value=membre[2])
                     new_photo = st.file_uploader("Nouvelle photo", type=['jpg','png','jpeg'])
-                    if st.form_submit_button("Enregistrer"):
-                        c.execute("UPDATE membres SET nom=?, prenom=?, whatsapp=? WHERE id=?", (new_nom, new_prenom, new_whatsapp, mid))
-                        if new_photo:
-                            if membre[3] and os.path.exists(membre[3]):
-                                os.remove(membre[3])
-                            matricule = c.execute("SELECT matricule FROM membres WHERE id=?", (mid,)).fetchone()[0]
-                            chemin = sauvegarder_photo(new_photo, matricule)
-                            c.execute("UPDATE membres SET photo_path=? WHERE id=?", (chemin, mid))
-                        conn.commit()
-                        del st.session_state['modif_membre_id']
-                        st.success("Membre modifié")
-                        st.rerun()
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.form_submit_button("Enregistrer"):
+                            c.execute("UPDATE membres SET nom=?, prenom=?, whatsapp=? WHERE id=?", (new_nom, new_prenom, new_whatsapp, mid))
+                            if new_photo:
+                                if membre[3] and os.path.exists(membre[3]):
+                                    os.remove(membre[3])
+                                matricule = c.execute("SELECT matricule FROM membres WHERE id=?", (mid,)).fetchone()[0]
+                                chemin = sauvegarder_photo(new_photo, matricule)
+                                c.execute("UPDATE membres SET photo_path=? WHERE id=?", (chemin, mid))
+                            conn.commit()
+                            del st.session_state['modif_membre_id']
+                            st.success("Membre modifié")
+                            st.rerun()
+                    with col2:
+                        if st.form_submit_button("Annuler"):
+                            del st.session_state['modif_membre_id']
+                            st.rerun()
     
     # Abonnements
     elif menu == "Abonnements":
@@ -903,18 +999,13 @@ elif st.session_state['role'] == 'equipe':
                 st.info(f"{m[1]} {m[2]} ({m[3]}) – ✅ {type_}")
             else:
                 with st.expander(f"{m[1]} {m[2]} ({m[3]}) – ❌ Non enregistré"):
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        abo = st.checkbox("📝 Abonnement", key=f"abo_eq_{m[0]}_{annee_debut}")
-                    with col2:
-                        reabo = st.checkbox("🔄 Réabonnement", key=f"reabo_eq_{m[0]}_{annee_debut}")
-                    if abo or reabo:
-                        montant = st.number_input("Montant (FCFA)", min_value=0, value=1000, step=500, key=f"mont_eq_{m[0]}_{annee_debut}")
-                        if st.button("Enregistrer", key=f"btn_eq_{m[0]}_{annee_debut}"):
-                            type_abo = "abonnement" if abo else "reabonnement"
-                            enregistrer_abonnement(m[0], annee_debut, montant, type_abo)
-                            st.success(f"{type_abo} enregistré")
-                            st.rerun()
+                    type_abo = st.radio("Type", ["Abonnement", "Réabonnement"], key=f"type_eq_{m[0]}_{annee_debut}", horizontal=True)
+                    montant = st.number_input("Montant (FCFA)", min_value=0, value=1000, step=500, key=f"mont_eq_{m[0]}_{annee_debut}")
+                    if st.button("Enregistrer", key=f"btn_eq_{m[0]}_{annee_debut}"):
+                        type_val = "abonnement" if type_abo == "Abonnement" else "reabonnement"
+                        enregistrer_abonnement(m[0], annee_debut, montant, type_val)
+                        st.success(f"{type_val} enregistré")
+                        st.rerun()
         st.markdown("---")
         tab_liste = st.tabs(["📝 Abonnés", "🔄 Réabonnés", "❌ Non enregistrés"])
         with tab_liste[0]:
@@ -985,13 +1076,9 @@ elif st.session_state['role'] == 'equipe':
                         else:
                             date_debut_obj = date(annee_debut_arch, 10, 1)
                             date_fin_obj = date(annee_fin_arch, 10, 1)
-                            c.execute("UPDATE membres SET statut='archive' WHERE id=?", (membre_choisi[0],))
                             paroisse_id = c.execute("SELECT paroisse_id FROM equipes WHERE id=?", (eid,)).fetchone()[0]
-                            c.execute('''INSERT INTO archives (membre_id, situation, date_debut, date_fin, commentaire, auteur_id, auteur_nom, auteur_role, paroisse_id, equipe_id)
-                                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                                      (membre_choisi[0], situation, date_debut_obj, date_fin_obj, commentaire,
-                                       st.session_state['user_id'], st.session_state['username'], 'equipe', paroisse_id, eid))
-                            conn.commit()
+                            archiver_membre(membre_choisi[0], situation, date_debut_obj, date_fin_obj, commentaire,
+                                            st.session_state['user_id'], st.session_state['username'], 'equipe', paroisse_id, eid)
                             st.success(f"✅ {membre_choisi[1]} {membre_choisi[2]} archivé.")
                             st.rerun()
         
@@ -1000,24 +1087,12 @@ elif st.session_state['role'] == 'equipe':
             st.subheader("✏️ Gérer les archives de votre équipe")
             for arch in archives_equipe:
                 arch_id, nom, prenom, matricule, situation, date_debut_raw, date_fin_raw, commentaire, membre_id = arch
-                # Conversion des dates
-                try:
-                    if isinstance(date_debut_raw, str):
-                        date_debut = date.fromisoformat(date_debut_raw)
-                    else:
-                        date_debut = date_debut_raw
-                    if isinstance(date_fin_raw, str):
-                        date_fin = date.fromisoformat(date_fin_raw)
-                    else:
-                        date_fin = date_fin_raw
-                except:
-                    date_debut = None
-                    date_fin = None
-                
-                if date_debut and date_fin:
-                    duree = (date_fin - date_debut).days // 365
-                    annee_debut_aff = date_debut.year
-                    annee_fin_aff = date_fin.year
+                date_debut_obj = convertir_en_date(date_debut_raw)
+                date_fin_obj = convertir_en_date(date_fin_raw)
+                if date_debut_obj and date_fin_obj:
+                    duree = (date_fin_obj - date_debut_obj).days // 365
+                    annee_debut_aff = date_debut_obj.year
+                    annee_fin_aff = date_fin_obj.year
                 else:
                     duree = 0
                     annee_debut_aff = "?"
@@ -1031,10 +1106,10 @@ elif st.session_state['role'] == 'equipe':
                         col1, col2 = st.columns(2)
                         with col1:
                             new_annee_debut = st.number_input("Année début (Oct)", min_value=2000, max_value=date.today().year+5,
-                                                               value=date_debut.year if date_debut else date.today().year, step=1)
+                                                               value=date_debut_obj.year if date_debut_obj else date.today().year, step=1)
                         with col2:
                             new_annee_fin = st.number_input("Année fin (Oct)", min_value=2000, max_value=date.today().year+10,
-                                                            value=date_fin.year if date_fin else date.today().year+1, step=1)
+                                                            value=date_fin_obj.year if date_fin_obj else date.today().year+1, step=1)
                         new_comment = st.text_area("Commentaire", value=commentaire or "")
                         col1, col2 = st.columns(2)
                         with col1:

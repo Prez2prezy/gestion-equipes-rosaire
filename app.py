@@ -1057,13 +1057,13 @@ elif menu == "Archives":
             with st.expander(f"{nom} {prenom} ({matricule}) - {situation} - {duree} an(s) - Oct {annee_debut_affiche} – Oct {annee_fin_affiche}"):
                 with st.form(f"edit_arch_{arch_id}"):
                     new_situation = st.selectbox("Situation", ["Déplacé", "Radié", "Défunt"],
-                                                 index=["Déplacé","Radié","Défunt"].index(situation) if situation in ["Déplacé","Radié","Défunt"] else 0)
+                                                 index=["a déménagé","Destination inconnue","est décédé(e)"].index(situation) if situation in ["Déplacé","Radié","Défunt"] else 0)
                     col1, col2 = st.columns(2)
                     with col1:
-                        new_annee_debut = st.number_input("Année début (Oct)", min_value=2000, max_value=date.today().year+5,
+                        new_annee_debut = st.number_input("Année début (Oct)", min_value=1960, max_value=date.today().year+5,
                                                            value=date_debut.year if date_debut else date.today().year, step=1)
                     with col2:
-                        new_annee_fin = st.number_input("Année fin (Oct)", min_value=2000, max_value=date.today().year+10,
+                        new_annee_fin = st.number_input("Année fin (Oct)", min_value=1960, max_value=date.today().year+10,
                                                         value=date_fin.year if date_fin else date.today().year+1, step=1)
                     new_comment = st.text_area("Commentaire", value=commentaire or "")
                     

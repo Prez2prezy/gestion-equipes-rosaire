@@ -94,7 +94,6 @@ def supprimer_photo(photo_path):
 
 # --- Fonctions pour les abonnements ---
 def enregistrer_abonnement(membre_id, annee_debut, montant=0, type_abonnement='abonnement'):
-    """annee_debut = année de début de la période (ex: 2025 pour Oct 2025 - Oct 2026)"""
     date_paiement = date.today()
     existant = c.execute("SELECT id FROM abonnements WHERE membre_id=? AND annee_debut=?", (membre_id, annee_debut)).fetchone()
     if existant:
@@ -112,17 +111,18 @@ def verifier_abonnement(membre_id, annee_debut):
                        (membre_id, annee_debut)).fetchone()
     return result is not None
 
-def get_statut_abonnement(membre_id, annee_debut):
-    if verifier_abonnement(membre_id, annee_debut):
-        type_ = c.execute("SELECT type_abonnement FROM abonnements WHERE membre_id=? AND annee_debut=?", (membre_id, annee_debut)).fetchone()
-        return f"✅ {type_[0].capitalize()}" if type_ else "✅ Inconnu"
-    else:
-        return "❌ En retard"
-
 def periode_affichage(annee_debut):
     return f"Oct {annee_debut} – Oct {annee_debut+1}"
 
-# --- Fonctions WhatsApp (inchangées) ---
+def afficher_situation(situation):
+    mapping = {
+        "Déplacé": "a déménagé",
+        "Radié": "indisponible",
+        "Défunt": "est décédé(e)"
+    }
+    return mapping.get(situation, situation)
+
+# --- Fonctions WhatsApp ---
 def lien_whatsapp(numero, message):
     if not numero:
         return None
@@ -197,22 +197,19 @@ def afficher_rappels_reabonnement_whatsapp(annee_debut, equipe_id=None):
     else:
         st.success(f"🎉 Tous les membres sont à jour pour la période {periode_affichage(annee_debut)} !")
 
-# --- Fonctions d'export Excel ---
+# --- Export Excel ---
 def exporter_excel_diocese():
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        # Paroisses
         paroisses = c.execute("SELECT id, nom, commune, ville, responsable, bureau FROM paroisses").fetchall()
         if paroisses:
             df = pd.DataFrame(paroisses, columns=["ID", "Nom", "Commune", "Ville", "Responsable", "Bureau"])
             df.to_excel(writer, sheet_name="Paroisses", index=False)
-        # Équipes
         equipes = c.execute('''SELECT e.id, e.nom_equipe, e.responsable, e.bureau, p.nom as paroisse, e.max_membres
                                FROM equipes e JOIN paroisses p ON e.paroisse_id = p.id''').fetchall()
         if equipes:
             df = pd.DataFrame(equipes, columns=["ID", "Nom équipe", "Responsable", "Bureau", "Paroisse", "Max membres"])
             df.to_excel(writer, sheet_name="Equipes", index=False)
-        # Membres actifs
         membres = c.execute('''SELECT m.matricule, m.nom, m.prenom, m.date_naissance, m.whatsapp, m.date_adhesion,
                                       p.nom as paroisse, e.nom_equipe as equipe
                                FROM membres m
@@ -223,7 +220,6 @@ def exporter_excel_diocese():
         if membres:
             df = pd.DataFrame(membres, columns=["Matricule", "Nom", "Prénom", "Date naissance", "WhatsApp", "Date adhésion", "Paroisse", "Équipe"])
             df.to_excel(writer, sheet_name="Membres actifs", index=False)
-        # Abonnements
         abonnements = c.execute('''SELECT a.id, m.matricule, m.nom, m.prenom, a.annee_debut, a.date_paiement, a.montant, a.type_abonnement
                                    FROM abonnements a
                                    JOIN membres m ON a.membre_id = m.id
@@ -232,7 +228,6 @@ def exporter_excel_diocese():
             df = pd.DataFrame(abonnements, columns=["ID", "Matricule", "Nom", "Prénom", "Année début", "Date paiement", "Montant", "Type"])
             df["Période"] = df["Année début"].apply(lambda x: f"Oct {x} – Oct {x+1}")
             df.to_excel(writer, sheet_name="Abonnements", index=False)
-        # Archives
         archives = c.execute('''SELECT m.matricule, m.nom, m.prenom, a.situation, a.date_debut, a.date_fin, a.commentaire,
                                        p.nom as paroisse, e.nom_equipe as equipe
                                 FROM archives a
@@ -246,50 +241,39 @@ def exporter_excel_diocese():
     output.seek(0)
     return output
 
-# --- Création des tables (mise à jour) ---
+# --- Création des tables ---
 c.execute('''CREATE TABLE IF NOT EXISTS diocese (id INTEGER PRIMARY KEY, nom TEXT, responsable TEXT, bureau TEXT)''')
 c.execute('''CREATE TABLE IF NOT EXISTS paroisses (id INTEGER PRIMARY KEY, nom TEXT, commune TEXT, ville TEXT, responsable TEXT, bureau TEXT, diocese_id INTEGER)''')
 c.execute('''CREATE TABLE IF NOT EXISTS equipes (id INTEGER PRIMARY KEY, nom_equipe TEXT, responsable TEXT, bureau TEXT, paroisse_id INTEGER, max_membres INTEGER DEFAULT 10)''')
 c.execute('''CREATE TABLE IF NOT EXISTS membres (id INTEGER PRIMARY KEY, matricule TEXT UNIQUE, nom TEXT, prenom TEXT, date_naissance DATE, whatsapp TEXT, date_adhesion DATE, photo_path TEXT, paroisse_id INTEGER, equipe_id INTEGER, statut TEXT DEFAULT 'actif')''')
 c.execute('''CREATE TABLE IF NOT EXISTS utilisateurs (id INTEGER PRIMARY KEY, username TEXT UNIQUE, password TEXT, role TEXT, diocese_id INTEGER, paroisse_id INTEGER, equipe_id INTEGER)''')
-# Table abonnements avec annee_debut au lieu de annee
 c.execute('''CREATE TABLE IF NOT EXISTS abonnements (id INTEGER PRIMARY KEY, membre_id INTEGER, annee_debut INTEGER, date_paiement DATE, montant REAL DEFAULT 0, type_abonnement TEXT DEFAULT 'abonnement', statut TEXT DEFAULT 'non_paye')''')
-# Table archives : situation au lieu de qualite, et ajout de date_debut, date_fin
 c.execute('''CREATE TABLE IF NOT EXISTS archives (id INTEGER PRIMARY KEY, membre_id INTEGER, situation TEXT, date_debut DATE, date_fin DATE, commentaire TEXT, auteur_id INTEGER, auteur_nom TEXT, auteur_role TEXT, paroisse_id INTEGER, equipe_id INTEGER)''')
 conn.commit()
 
-# --- Migrations : ajout des colonnes manquantes pour les nouvelles fonctionnalités ---
+# --- Migrations : ajout des colonnes manquantes (sécurisé) ---
 try:
     c.execute("ALTER TABLE membres ADD COLUMN statut TEXT DEFAULT 'actif'")
     conn.commit()
-except sqlite3.OperationalError:
-    pass
-
+except: pass
 try:
     c.execute("ALTER TABLE abonnements ADD COLUMN annee_debut INTEGER")
     conn.commit()
-except sqlite3.OperationalError:
-    pass
-
+except: pass
 try:
     c.execute("ALTER TABLE archives ADD COLUMN situation TEXT")
     conn.commit()
-except sqlite3.OperationalError:
-    pass
-
+except: pass
 try:
     c.execute("ALTER TABLE archives ADD COLUMN date_debut DATE")
     conn.commit()
-except sqlite3.OperationalError:
-    pass
-
+except: pass
 try:
     c.execute("ALTER TABLE archives ADD COLUMN date_fin DATE")
     conn.commit()
-except sqlite3.OperationalError:
-    pass
-    
-# --- Initialisation : diocèse par défaut ---
+except: pass
+
+# --- Initialisation ---
 c.execute("SELECT COUNT(*) FROM diocese")
 if c.fetchone()[0] == 0:
     c.execute("INSERT INTO diocese (nom, responsable, bureau) VALUES (?, ?, ?)", ("GRAND-BASSAM", "À définir", "À définir"))
@@ -357,10 +341,10 @@ st.markdown("---")
 if st.session_state['role'] == 'diocese':
     menu = st.sidebar.radio("Navigation", ["Voir diocèse", "Créer paroisses", "Gérer paroisses", "Rechercher par matricule", "Gérer les accès", "Statistiques", "📅 Abonnements", "💬 WhatsApp", "📊 Export Excel", "📦 Archives", "🗑️ Réinitialiser tout"])
     
-    # --- Voir diocèse (inchangé) ---
+    # Voir diocèse
     if menu == "Voir diocèse":
         st.markdown('<h2 style="color:#1A237E;">🏛️ DIOCÈSE DE GRAND-BASSAM</h2>', unsafe_allow_html=True)
-        d = c.execute("SELECT responsable, bureau FROM diocese WHERE id=?", (st.session_state['diocese_id'],)).fetchone()
+        d = c.execute("SELECT responsable, bureau FROM diocese WHERE id=?", (1,)).fetchone()
         if d:
             st.write(f"**Responsable diocésain :** {d[0]}")
             st.write(f"**Bureau diocésain :** {d[1]}")
@@ -373,7 +357,7 @@ if st.session_state['role'] == 'diocese':
                     st.success("Mis à jour !")
                     st.rerun()
     
-    # --- Créer paroisses (inchangé) ---
+    # Créer paroisses
     elif menu == "Créer paroisses":
         st.markdown('<h2 style="color:#1A237E;">🏘️ Créer paroisses</h2>', unsafe_allow_html=True)
         with st.form("creer_paroisse"):
@@ -402,7 +386,7 @@ if st.session_state['role'] == 'diocese':
                 else:
                     st.error("Tous les champs sont requis")
     
-    # --- Gérer paroisses (consultation inchangée) ---
+    # Gérer paroisses
     elif menu == "Gérer paroisses":
         st.markdown('<h2 style="color:#1A237E;">📋 Consultation des paroisses</h2>', unsafe_allow_html=True)
         paroisses = c.execute("SELECT id, nom, commune, ville, responsable, bureau FROM paroisses").fetchall()
@@ -416,7 +400,7 @@ if st.session_state['role'] == 'diocese':
                     for eq in equipes:
                         st.write(f"- {eq[0]} (Resp: {eq[1]})")
     
-    # --- Rechercher par matricule (inchangé) ---
+    # Rechercher par matricule
     elif menu == "Rechercher par matricule":
         st.markdown('<h2 style="color:#1A237E;">🔍 Recherche par matricule</h2>', unsafe_allow_html=True)
         matricule = st.text_input("Matricule (ex: BN-ABCDE)")
@@ -436,7 +420,7 @@ if st.session_state['role'] == 'diocese':
             else:
                 st.error("Non trouvé ou membre archivé")
     
-    # --- Gérer les accès (inchangé) ---
+    # Gérer les accès
     elif menu == "Gérer les accès":
         st.markdown('<h2 style="color:#1A237E;">🔐 Gestion des accès</h2>', unsafe_allow_html=True)
         st.markdown("### 🏘️ Paroisses")
@@ -454,7 +438,7 @@ if st.session_state['role'] == 'diocese':
                         st.code(f"Nouveau mot de passe : {nouveau}", language="text")
                         st.rerun()
     
-    # --- Statistiques ---
+    # Statistiques
     elif menu == "Statistiques":
         st.markdown('<h2 style="color:#1A237E;">📊 Statistiques</h2>', unsafe_allow_html=True)
         nb_p = c.execute("SELECT COUNT(*) FROM paroisses").fetchone()[0]
@@ -465,7 +449,7 @@ if st.session_state['role'] == 'diocese':
         col2.metric("👥 Équipes", nb_e)
         col3.metric("👤 Membres actifs", nb_m)
     
-    # --- Abonnements (consultation) ---
+    # Abonnements (consultation)
     elif menu == "📅 Abonnements":
         st.markdown('<h2 style="color:#1A237E;">📅 Suivi des abonnements (Diocèse)</h2>', unsafe_allow_html=True)
         annee_debut = st.number_input("Année de début de la période", min_value=2020, max_value=date.today().year+1, value=date.today().year, step=1)
@@ -476,7 +460,6 @@ if st.session_state['role'] == 'diocese':
         col1.metric("Total membres actifs", total_membres)
         col2.metric("Abonnements enregistrés", payes, delta=f"{payes/total_membres*100:.0f}%" if total_membres else "0%")
         st.markdown("---")
-        # Affichage par paroisse (lecture seule)
         paroisses = c.execute("SELECT id, nom FROM paroisses").fetchall()
         for p in paroisses:
             with st.expander(f"🏛️ {p[1]}"):
@@ -499,7 +482,7 @@ if st.session_state['role'] == 'diocese':
                             statut = m[3] if m[3] else "Non enregistré"
                             st.write(f"- {m[0]} {m[1]} ({m[2]}) – {statut}")
     
-    # --- Communications WhatsApp ---
+    # WhatsApp
     elif menu == "💬 WhatsApp":
         st.markdown('<h2 style="color:#1A237E;">💬 Communications WhatsApp</h2>', unsafe_allow_html=True)
         tab1, tab2 = st.tabs(["🎂 Anniversaires", "📢 Rappels réabonnement"])
@@ -509,7 +492,7 @@ if st.session_state['role'] == 'diocese':
             annee_rappel = st.number_input("Année de début", min_value=2020, max_value=date.today().year+1, value=date.today().year, step=1, key="rappel_diocese")
             afficher_rappels_reabonnement_whatsapp(annee_rappel)
     
-    # --- Export Excel ---
+    # Export Excel
     elif menu == "📊 Export Excel":
         st.markdown('<h2 style="color:#1A237E;">📊 Export des données</h2>', unsafe_allow_html=True)
         nb_membres = c.execute("SELECT COUNT(*) FROM membres").fetchone()[0]
@@ -519,7 +502,7 @@ if st.session_state['role'] == 'diocese':
             excel_file = exporter_excel_diocese()
             st.download_button("📥 Télécharger l'export Excel", data=excel_file, file_name=f"export_rosaire_{date.today()}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     
-    # --- Archives (consultation seule pour le diocèse) ---
+    # Archives (consultation seule)
     elif menu == "📦 Archives":
         st.markdown('<h2 style="color:#1A237E;">📦 Archives du diocèse</h2>', unsafe_allow_html=True)
         archives = c.execute('''
@@ -535,9 +518,10 @@ if st.session_state['role'] == 'diocese':
             st.info("Aucune archive")
         else:
             for a in archives:
+                situation_affichee = afficher_situation(a[3])
                 icone = {"Déplacé":"📤","Radié":"🚫","Défunt":"🕊️"}.get(a[3],"📌")
-                duree = (a[5] - a[4]).days // 365 if a[4] and a[5] else "?"
-                with st.expander(f"{icone} {a[1]} {a[2]} ({a[0]}) – {a[3]} – {a[5]}"):
+                duree = (date.fromisoformat(a[5]) - date.fromisoformat(a[4])).days // 365 if a[4] and a[5] else 0
+                with st.expander(f"{icone} {a[1]} {a[2]} ({a[0]}) – {situation_affichee} – {a[5]}"):
                     st.write(f"Ajouté par : {a[9]}")
                     st.write(f"Paroisse : {a[7]}")
                     st.write(f"Équipe : {a[8]}")
@@ -546,7 +530,7 @@ if st.session_state['role'] == 'diocese':
                     if a[6]:
                         st.write(f"Commentaire : {a[6]}")
     
-    # --- Réinitialisation totale (inchangée) ---
+    # Réinitialisation totale
     elif menu == "🗑️ Réinitialiser tout":
         st.markdown('<h2 style="color:#1A237E;">🗑️ RÉINITIALISATION COMPLÈTE</h2>', unsafe_allow_html=True)
         st.error("⚠️ ACTION IRRÉVERSIBLE !")
@@ -572,7 +556,7 @@ elif st.session_state['role'] == 'paroisse':
     nom_paroisse = c.execute("SELECT nom FROM paroisses WHERE id=?", (pid,)).fetchone()[0]
     menu = st.sidebar.radio("Navigation", ["Ma paroisse", "Mes équipes", "Membres", "Statistiques", "Abonnements", "WhatsApp", "Export Excel", "Archives"])
     
-    # --- Ma paroisse (inchangé) ---
+    # Ma paroisse
     if menu == "Ma paroisse":
         st.markdown(f'<h2 style="color:#1A237E;">🏘️ {nom_paroisse}</h2>', unsafe_allow_html=True)
         p = c.execute("SELECT commune, ville, responsable, bureau FROM paroisses WHERE id=?", (pid,)).fetchone()
@@ -582,7 +566,7 @@ elif st.session_state['role'] == 'paroisse':
             st.write(f"Responsable : {p[2]}")
             st.write(f"Bureau : {p[3]}")
     
-    # --- Mes équipes (gestion des équipes) ---
+    # Mes équipes
     elif menu == "Mes équipes":
         st.markdown(f'<h2 style="color:#1A237E;">👥 Équipes de {nom_paroisse}</h2>', unsafe_allow_html=True)
         info_paroisse = c.execute("SELECT nom, commune FROM paroisses WHERE id=?", (pid,)).fetchone()
@@ -612,7 +596,7 @@ elif st.session_state['role'] == 'paroisse':
             nb_membres = c.execute("SELECT COUNT(*) FROM membres WHERE equipe_id=? AND statut='actif'", (eq[0],)).fetchone()[0]
             st.write(f"- **{eq[1]}** : {eq[2]} ({nb_membres}/10 membres)")
     
-    # --- Membres (gestion des membres actifs) ---
+    # Membres
     elif menu == "Membres":
         st.markdown(f'<h2 style="color:#1A237E;">👤 Membres de {nom_paroisse}</h2>', unsafe_allow_html=True)
         equipes = c.execute("SELECT id, nom_equipe FROM equipes WHERE paroisse_id=? ORDER BY nom_equipe", (pid,)).fetchall()
@@ -689,7 +673,7 @@ elif st.session_state['role'] == 'paroisse':
                             st.success("Membre modifié")
                             st.rerun()
     
-    # --- Statistiques de la paroisse ---
+    # Statistiques
     elif menu == "Statistiques":
         st.markdown(f'<h2 style="color:#1A237E;">📊 Statistiques de {nom_paroisse}</h2>', unsafe_allow_html=True)
         nb_eq = c.execute("SELECT COUNT(*) FROM equipes WHERE paroisse_id=?", (pid,)).fetchone()[0]
@@ -698,7 +682,7 @@ elif st.session_state['role'] == 'paroisse':
         col1.metric("Équipes", nb_eq)
         col2.metric("Membres actifs", nb_m)
     
-    # --- Abonnements (gestion pour la paroisse) ---
+    # Abonnements (gestion)
     elif menu == "Abonnements":
         st.markdown(f'<h2 style="color:#1A237E;">💰 Gestion des abonnements - {nom_paroisse}</h2>', unsafe_allow_html=True)
         annee_debut = st.number_input("Année de début de la période", min_value=2020, max_value=date.today().year+1, value=date.today().year, step=1)
@@ -729,7 +713,6 @@ elif st.session_state['role'] == 'paroisse':
                                 enregistrer_abonnement(m[0], annee_debut, montant, type_abo)
                                 st.success(f"{type_abo} enregistré pour {m[1]} {m[2]}")
                                 st.rerun()
-            # Affichage des listes
             st.markdown("---")
             tab_liste = st.tabs(["📝 Abonnés", "🔄 Réabonnés", "❌ Non enregistrés"])
             with tab_liste[0]:
@@ -757,7 +740,7 @@ elif st.session_state['role'] == 'paroisse':
                 for n in non_inscrits:
                     st.write(f"- {n[0]} {n[1]} ({n[2]})")
     
-    # --- WhatsApp (inchangé) ---
+    # WhatsApp
     elif menu == "WhatsApp":
         st.markdown(f'<h2 style="color:#1A237E;">💬 Communications WhatsApp - {nom_paroisse}</h2>', unsafe_allow_html=True)
         tab1, tab2 = st.tabs(["🎂 Anniversaires", "📢 Rappels réabonnement"])
@@ -773,7 +756,7 @@ elif st.session_state['role'] == 'paroisse':
             else:
                 st.info("Aucune équipe")
     
-    # --- Export Excel (membres de la paroisse) ---
+    # Export Excel
     elif menu == "Export Excel":
         st.markdown(f'<h2 style="color:#1A237E;">📊 Export des membres de {nom_paroisse}</h2>', unsafe_allow_html=True)
         membres = c.execute('''SELECT m.matricule, m.nom, m.prenom, m.date_naissance, m.whatsapp, m.date_adhesion, e.nom_equipe
@@ -791,7 +774,7 @@ elif st.session_state['role'] == 'paroisse':
         else:
             st.warning("Aucun membre actif")
     
-    # --- Archives (lecture seule pour la paroisse) ---
+    # Archives (lecture seule)
     elif menu == "Archives":
         st.markdown(f'<h2 style="color:#1A237E;">📦 Archives de la paroisse {nom_paroisse}</h2>', unsafe_allow_html=True)
         archives = c.execute('''
@@ -807,9 +790,10 @@ elif st.session_state['role'] == 'paroisse':
             st.info("Aucune archive pour cette paroisse")
         else:
             for a in archives:
+                situation_affichee = afficher_situation(a[3])
                 icone = {"Déplacé":"📤","Radié":"🚫","Défunt":"🕊️"}.get(a[3],"📌")
-                duree = (a[5] - a[4]).days // 365 if a[4] and a[5] else "?"
-                with st.expander(f"{icone} {a[1]} {a[2]} ({a[0]}) – {a[3]} – {a[5]}"):
+                duree = (date.fromisoformat(a[5]) - date.fromisoformat(a[4])).days // 365 if a[4] and a[5] else 0
+                with st.expander(f"{icone} {a[1]} {a[2]} ({a[0]}) – {situation_affichee} – {a[5]}"):
                     st.write(f"Ajouté par : {a[8]}")
                     st.write(f"Équipe : {a[7]}")
                     if a[4] and a[5]:
@@ -824,7 +808,7 @@ elif st.session_state['role'] == 'equipe':
     nom_equipe = equipe_info[0] if equipe_info else "Mon équipe"
     menu = st.sidebar.radio("Navigation", ["Mon équipe", "Mes membres", "Abonnements", "WhatsApp", "Archives"])
     
-    # --- Mon équipe ---
+    # Mon équipe
     if menu == "Mon équipe":
         st.markdown(f'<h2 style="color:#1A237E;">👥 {nom_equipe}</h2>', unsafe_allow_html=True)
         eq = c.execute("SELECT responsable, bureau FROM equipes WHERE id=?", (eid,)).fetchone()
@@ -834,7 +818,7 @@ elif st.session_state['role'] == 'equipe':
             nb = c.execute("SELECT COUNT(*) FROM membres WHERE equipe_id=? AND statut='actif'", (eid,)).fetchone()[0]
             st.metric("Effectif", f"{nb}/10")
     
-    # --- Mes membres (gestion des membres actifs) ---
+    # Mes membres
     elif menu == "Mes membres":
         st.markdown(f'<h2 style="color:#1A237E;">👤 Membres de {nom_equipe}</h2>', unsafe_allow_html=True)
         nb = c.execute("SELECT COUNT(*) FROM membres WHERE equipe_id=? AND statut='actif'", (eid,)).fetchone()[0]
@@ -905,7 +889,7 @@ elif st.session_state['role'] == 'equipe':
                         st.success("Membre modifié")
                         st.rerun()
     
-    # --- Abonnements (gestion pour l'équipe) ---
+    # Abonnements
     elif menu == "Abonnements":
         st.markdown(f'<h2 style="color:#1A237E;">💰 Gestion des abonnements - {nom_equipe}</h2>', unsafe_allow_html=True)
         annee_debut = st.number_input("Année de début de la période", min_value=2020, max_value=date.today().year+1, value=date.today().year, step=1)
@@ -958,7 +942,7 @@ elif st.session_state['role'] == 'equipe':
             for n in non_inscrits:
                 st.write(f"- {n[0]} {n[1]} ({n[2]})")
     
-    # --- WhatsApp pour l'équipe ---
+    # WhatsApp
     elif menu == "WhatsApp":
         st.markdown(f'<h2 style="color:#1A237E;">💬 Communications WhatsApp - {nom_equipe}</h2>', unsafe_allow_html=True)
         tab1, tab2 = st.tabs(["🎂 Anniversaires", "📢 Rappels réabonnement"])
@@ -968,7 +952,7 @@ elif st.session_state['role'] == 'equipe':
             annee_rappel = st.number_input("Année de début", min_value=2020, max_value=date.today().year+1, value=date.today().year, step=1, key="rappel_equipe")
             afficher_rappels_reabonnement_whatsapp(annee_rappel, equipe_id=eid)
     
-    # --- Archives (gestion pour l'équipe) ---
+    # Archives (avec gestion complète)
     elif menu == "Archives":
         st.markdown(f'<h2 style="color:#1A237E;">📦 Archives de {nom_equipe}</h2>', unsafe_allow_html=True)
         membres_actifs = c.execute("SELECT id, nom, prenom, matricule FROM membres WHERE equipe_id=? AND statut='actif' ORDER BY nom", (eid,)).fetchall()
@@ -979,116 +963,101 @@ elif st.session_state['role'] == 'equipe':
             WHERE a.equipe_id = ?
             ORDER BY a.date_fin DESC
         ''', (eid,)).fetchall()
-
-elif menu == "Archives":
-    st.markdown(f'<h2 style="color:#1A237E;">📦 Archives de {nom_equipe}</h2>', unsafe_allow_html=True)
-    # Membres actifs de l'équipe
-    membres_actifs = c.execute("SELECT id, nom, prenom, matricule FROM membres WHERE equipe_id=? AND statut='actif' ORDER BY nom", (eid,)).fetchall()
-    # Archives existantes
-    archives_equipe = c.execute('''
-        SELECT a.id, m.nom, m.prenom, m.matricule, a.situation, a.date_debut, a.date_fin, a.commentaire, m.id as membre_id
-        FROM archives a
-        JOIN membres m ON a.membre_id = m.id
-        WHERE a.equipe_id = ?
-        ORDER BY a.date_fin DESC
-    ''', (eid,)).fetchall()
-    
-    # --- Ajout d'une archive ---
-    with st.expander("➕ Archiver un membre de l'équipe"):
-        if not membres_actifs:
-            st.warning("Aucun membre actif à archiver.")
-        else:
-            with st.form("archive_membre"):
-                membre_choisi = st.selectbox("Membre à archiver", membres_actifs, format_func=lambda x: f"{x[1]} {x[2]} ({x[3]})")
-                situation = st.radio("Situation", ["Déplacé", "Radié", "Défunt"])
-                col1, col2 = st.columns(2)
-                with col1:
-                    annee_debut = st.number_input("Année de début (Oct)", min_value=2000, max_value=date.today().year+5, value=date.today().year, step=1)
-                with col2:
-                    annee_fin = st.number_input("Année de fin (Oct)", min_value=2000, max_value=date.today().year+10, value=date.today().year+1, step=1)
-                commentaire = st.text_area("Commentaire (optionnel)")
-                
-                if st.form_submit_button("Archiver"):
-                    # Validation : l'année de fin doit être strictement supérieure à l'année de début
-                    if annee_fin <= annee_debut:
-                        st.error("❌ L'année de fin doit être au moins un an après l'année de début.")
-                    else:
-                        date_debut = date(annee_debut, 10, 1)
-                        date_fin = date(annee_fin, 10, 1)
-                        # Mettre à jour le statut du membre
-                        c.execute("UPDATE membres SET statut='archive' WHERE id=?", (membre_choisi[0],))
-                        paroisse_id = c.execute("SELECT paroisse_id FROM equipes WHERE id=?", (eid,)).fetchone()[0]
-                        c.execute('''INSERT INTO archives (membre_id, situation, date_debut, date_fin, commentaire, auteur_id, auteur_nom, auteur_role, paroisse_id, equipe_id)
-                                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                                  (membre_choisi[0], situation, date_debut, date_fin, commentaire,
-                                   st.session_state['user_id'], st.session_state['username'], 'equipe', paroisse_id, eid))
-                        conn.commit()
-                        st.success(f"✅ {membre_choisi[1]} {membre_choisi[2]} archivé.")
-                        st.rerun()
-    
-    # --- Gestion des archives existantes ---
-    if archives_equipe:
-        st.subheader("✏️ Gérer les archives de votre équipe")
-        for arch in archives_equipe:
-            # Conversion sécurisée des dates (peuvent être des chaînes ou des objets date)
-            arch_id, nom, prenom, matricule, situation, date_debut_raw, date_fin_raw, commentaire, membre_id = arch
-            try:
-                if isinstance(date_debut_raw, str):
-                    date_debut = date.fromisoformat(date_debut_raw)
-                else:
-                    date_debut = date_debut_raw
-                if isinstance(date_fin_raw, str):
-                    date_fin = date.fromisoformat(date_fin_raw)
-                else:
-                    date_fin = date_fin_raw
-            except:
-                date_debut = None
-                date_fin = None
-            
-            if date_debut and date_fin:
-                duree = (date_fin - date_debut).days // 365
-                annee_debut_affiche = date_debut.year
-                annee_fin_affiche = date_fin.year
+        
+        # Ajout d'une archive
+        with st.expander("➕ Archiver un membre de l'équipe"):
+            if not membres_actifs:
+                st.warning("Aucun membre actif à archiver.")
             else:
-                duree = 0
-                annee_debut_affiche = "?"
-                annee_fin_affiche = "?"
-            
-            with st.expander(f"{nom} {prenom} ({matricule}) - {situation} - {duree} an(s) - Oct {annee_debut_affiche} – Oct {annee_fin_affiche}"):
-                with st.form(f"edit_arch_{arch_id}"):
-                    new_situation = st.selectbox("Situation", ["Déplacé", "Radié", "Défunt"],
-                                                 index=["a déménagé","Destination inconnue","est décédé(e)"].index(situation) if situation in ["Déplacé","Radié","Défunt"] else 0)
+                with st.form("archive_membre"):
+                    membre_choisi = st.selectbox("Membre à archiver", membres_actifs, format_func=lambda x: f"{x[1]} {x[2]} ({x[3]})")
+                    situation = st.radio("Situation", ["Déplacé", "Radié", "Défunt"])
                     col1, col2 = st.columns(2)
                     with col1:
-                        new_annee_debut = st.number_input("Année début (Oct)", min_value=1960, max_value=date.today().year+5,
-                                                           value=date_debut.year if date_debut else date.today().year, step=1)
+                        annee_debut_arch = st.number_input("Année de début (Oct)", min_value=2000, max_value=date.today().year+5, value=date.today().year, step=1)
                     with col2:
-                        new_annee_fin = st.number_input("Année fin (Oct)", min_value=1960, max_value=date.today().year+10,
-                                                        value=date_fin.year if date_fin else date.today().year+1, step=1)
-                    new_comment = st.text_area("Commentaire", value=commentaire or "")
+                        annee_fin_arch = st.number_input("Année de fin (Oct)", min_value=2000, max_value=date.today().year+10, value=date.today().year+1, step=1)
+                    commentaire = st.text_area("Commentaire (optionnel)")
                     
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        if st.form_submit_button("💾 Mettre à jour"):
-                            if new_annee_fin <= new_annee_debut:
-                                st.error("L'année de fin doit être au moins un an après l'année de début.")
-                            else:
-                                new_date_debut = date(new_annee_debut, 10, 1)
-                                new_date_fin = date(new_annee_fin, 10, 1)
-                                c.execute("UPDATE archives SET situation=?, date_debut=?, date_fin=?, commentaire=? WHERE id=?",
-                                          (new_situation, new_date_debut, new_date_fin, new_comment, arch_id))
-                                conn.commit()
-                                st.success("Archive modifiée")
-                                st.rerun()
-                    with col2:
-                        if situation in ("Déplacé", "Radié"):
-                            if st.form_submit_button("🔄 Réintégrer (devient actif)"):
-                                c.execute("UPDATE membres SET statut='actif' WHERE id=?", (membre_id,))
-                                c.execute("DELETE FROM archives WHERE id=?", (arch_id,))
-                                conn.commit()
-                                st.success(f"{nom} {prenom} a été réintégré(e).")
-                                st.rerun()
+                    if st.form_submit_button("Archiver"):
+                        if annee_fin_arch <= annee_debut_arch:
+                            st.error("❌ L'année de fin doit être au moins un an après l'année de début.")
                         else:
-                            st.info("Un défunt ne peut pas être réintégré.")
-    else:
-        st.info("Aucune archive pour cette équipe.")
+                            date_debut_obj = date(annee_debut_arch, 10, 1)
+                            date_fin_obj = date(annee_fin_arch, 10, 1)
+                            c.execute("UPDATE membres SET statut='archive' WHERE id=?", (membre_choisi[0],))
+                            paroisse_id = c.execute("SELECT paroisse_id FROM equipes WHERE id=?", (eid,)).fetchone()[0]
+                            c.execute('''INSERT INTO archives (membre_id, situation, date_debut, date_fin, commentaire, auteur_id, auteur_nom, auteur_role, paroisse_id, equipe_id)
+                                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                                      (membre_choisi[0], situation, date_debut_obj, date_fin_obj, commentaire,
+                                       st.session_state['user_id'], st.session_state['username'], 'equipe', paroisse_id, eid))
+                            conn.commit()
+                            st.success(f"✅ {membre_choisi[1]} {membre_choisi[2]} archivé.")
+                            st.rerun()
+        
+        # Gestion des archives existantes
+        if archives_equipe:
+            st.subheader("✏️ Gérer les archives de votre équipe")
+            for arch in archives_equipe:
+                arch_id, nom, prenom, matricule, situation, date_debut_raw, date_fin_raw, commentaire, membre_id = arch
+                # Conversion des dates
+                try:
+                    if isinstance(date_debut_raw, str):
+                        date_debut = date.fromisoformat(date_debut_raw)
+                    else:
+                        date_debut = date_debut_raw
+                    if isinstance(date_fin_raw, str):
+                        date_fin = date.fromisoformat(date_fin_raw)
+                    else:
+                        date_fin = date_fin_raw
+                except:
+                    date_debut = None
+                    date_fin = None
+                
+                if date_debut and date_fin:
+                    duree = (date_fin - date_debut).days // 365
+                    annee_debut_aff = date_debut.year
+                    annee_fin_aff = date_fin.year
+                else:
+                    duree = 0
+                    annee_debut_aff = "?"
+                    annee_fin_aff = "?"
+                
+                situation_affichee = afficher_situation(situation)
+                with st.expander(f"{nom} {prenom} ({matricule}) – {situation_affichee} – {duree} an(s) - Oct {annee_debut_aff} – Oct {annee_fin_aff}"):
+                    with st.form(f"edit_arch_{arch_id}"):
+                        new_situation = st.selectbox("Situation", ["Déplacé", "Radié", "Défunt"],
+                                                     index=["Déplacé","Radié","Défunt"].index(situation) if situation in ["Déplacé","Radié","Défunt"] else 0)
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            new_annee_debut = st.number_input("Année début (Oct)", min_value=2000, max_value=date.today().year+5,
+                                                               value=date_debut.year if date_debut else date.today().year, step=1)
+                        with col2:
+                            new_annee_fin = st.number_input("Année fin (Oct)", min_value=2000, max_value=date.today().year+10,
+                                                            value=date_fin.year if date_fin else date.today().year+1, step=1)
+                        new_comment = st.text_area("Commentaire", value=commentaire or "")
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.form_submit_button("💾 Mettre à jour"):
+                                if new_annee_fin <= new_annee_debut:
+                                    st.error("L'année de fin doit être au moins un an après l'année de début.")
+                                else:
+                                    new_date_debut = date(new_annee_debut, 10, 1)
+                                    new_date_fin = date(new_annee_fin, 10, 1)
+                                    c.execute("UPDATE archives SET situation=?, date_debut=?, date_fin=?, commentaire=? WHERE id=?",
+                                              (new_situation, new_date_debut, new_date_fin, new_comment, arch_id))
+                                    conn.commit()
+                                    st.success("Archive modifiée")
+                                    st.rerun()
+                        with col2:
+                            if situation in ("Déplacé", "Radié"):
+                                if st.form_submit_button("🔄 Réintégrer (devient actif)"):
+                                    c.execute("UPDATE membres SET statut='actif' WHERE id=?", (membre_id,))
+                                    c.execute("DELETE FROM archives WHERE id=?", (arch_id,))
+                                    conn.commit()
+                                    st.success(f"{nom} {prenom} a été réintégré(e).")
+                                    st.rerun()
+                            else:
+                                st.info("Un défunt ne peut pas être réintégré.")
+        else:
+            st.info("Aucune archive pour cette équipe.")

@@ -258,24 +258,37 @@ c.execute('''CREATE TABLE IF NOT EXISTS abonnements (id INTEGER PRIMARY KEY, mem
 c.execute('''CREATE TABLE IF NOT EXISTS archives (id INTEGER PRIMARY KEY, membre_id INTEGER, situation TEXT, date_debut DATE, date_fin DATE, commentaire TEXT, auteur_id INTEGER, auteur_nom TEXT, auteur_role TEXT, paroisse_id INTEGER, equipe_id INTEGER)''')
 conn.commit()
 
-# Ajout de colonnes si nécessaire (migration)
+# --- Migrations : ajout des colonnes manquantes pour les nouvelles fonctionnalités ---
 try:
     c.execute("ALTER TABLE membres ADD COLUMN statut TEXT DEFAULT 'actif'")
     conn.commit()
-except:
+except sqlite3.OperationalError:
     pass
+
 try:
     c.execute("ALTER TABLE abonnements ADD COLUMN annee_debut INTEGER")
     conn.commit()
-except:
-    pass
-try:
-    c.execute("ALTER TABLE archives ADD COLUMN date_debut DATE")
-    c.execute("ALTER TABLE archives ADD COLUMN date_fin DATE")
-    conn.commit()
-except:
+except sqlite3.OperationalError:
     pass
 
+try:
+    c.execute("ALTER TABLE archives ADD COLUMN situation TEXT")
+    conn.commit()
+except sqlite3.OperationalError:
+    pass
+
+try:
+    c.execute("ALTER TABLE archives ADD COLUMN date_debut DATE")
+    conn.commit()
+except sqlite3.OperationalError:
+    pass
+
+try:
+    c.execute("ALTER TABLE archives ADD COLUMN date_fin DATE")
+    conn.commit()
+except sqlite3.OperationalError:
+    pass
+    
 # --- Initialisation : diocèse par défaut ---
 c.execute("SELECT COUNT(*) FROM diocese")
 if c.fetchone()[0] == 0:

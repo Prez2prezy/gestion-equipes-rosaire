@@ -624,7 +624,7 @@ elif st.session_state['role'] == 'paroisse':
     
     # Membres
     elif menu == "Membres":
-        st.markdown(f'<h2 style="color:#1A237E; white-space: nowrap;">👤 Membres de "l'"{nom_paroisse}</h2>', unsafe_allow_html=True)
+        st.markdown(f'<h2 style="color:#1A237E; white-space: nowrap;">👤 Membres de {nom_paroisse}</h2>', unsafe_allow_html=True)
         equipes = c.execute("SELECT id, nom_equipe FROM equipes WHERE paroisse_id=? ORDER BY nom_equipe", (pid,)).fetchall()
         if not equipes:
             st.warning("Aucune équipe. Créez une équipe d'abord.")

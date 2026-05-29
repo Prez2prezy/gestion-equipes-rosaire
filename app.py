@@ -118,7 +118,7 @@ def verifier_abonnement(membre_id, annee_debut):
     return result is not None
 
 def periode_affichage(annee_debut):
-    return f"Oct {annee_debut} – Oct {annee_debut+1}"
+    return f"sept {annee_debut} – sept {annee_debut+1}"
 
 def afficher_situation(situation):
     mapping = {
@@ -245,7 +245,7 @@ def exporter_excel_diocese():
                                        ORDER BY a.annee_debut DESC, m.nom''').fetchall()
             if abonnements:
                 df = pd.DataFrame(abonnements, columns=["ID", "Matricule", "Nom", "Prénom", "Année début", "Date paiement", "Montant", "Type"])
-                df["Période"] = df["Année début"].apply(lambda x: f"Oct {x} – Oct {x+1}")
+                df["Période"] = df["Année début"].apply(lambda x: f"sept {x} – sept {x+1}")
                 df.to_excel(writer, sheet_name="Abonnements", index=False)
             archives = c.execute('''SELECT m.matricule, m.nom, m.prenom, a.situation, a.date_debut, a.date_fin, a.commentaire,
                                            p.nom as paroisse, e.nom_equipe as equipe
@@ -548,11 +548,11 @@ if st.session_state['role'] == 'diocese':
                 date_debut_obj = convertir_en_date(a[4])
                 date_fin_obj = convertir_en_date(a[5])
                 duree = (date_fin_obj - date_debut_obj).days // 365 if (date_debut_obj and date_fin_obj) else 0
-                with st.expander(f"{icone} {a[1]} {a[2]} ({a[0]}) – {situation_affichee} – a médité {duree} an(s) avec nous - d'oct {date_debut_obj.year} à oct {date_fin_obj.year}"):
+                with st.expander(f"{icone} {a[1]} {a[2]} ({a[0]}) – {situation_affichee} – a médité {duree} an(s) avec nous - d'sept {date_debut_obj.year} à sept {date_fin_obj.year}"):
                     st.write(f"Ajouté par : {a[8]}")
                     st.write(f"Paroisse : {a[7]}")
                     if date_debut_obj and date_fin_obj:
-                        st.write(f"Période : Oct {date_debut_obj.year} – Oct {date_fin_obj.year} ({duree} an(s))")
+                        st.write(f"Période : sept {date_debut_obj.year} – sept {date_fin_obj.year} ({duree} an(s))")
                     if a[6]:
                         st.write(f"Commentaire : {a[6]}")
     
@@ -685,8 +685,8 @@ elif st.session_state['role'] == 'paroisse':
                     st.warning(f"Archivage de {membre_arch[0]} {membre_arch[1]} ({membre_arch[2]})")
                     with st.form("form_archive"):
                         situation = st.radio("Situation", ["Déplacé", "Radié", "Défunt"])
-                        annee_debut_arch = st.number_input("Année de début (Oct)", min_value=2000, max_value=date.today().year+5, value=date.today().year, step=1)
-                        annee_fin_arch = st.number_input("Année de fin (Oct)", min_value=2000, max_value=date.today().year+10, value=date.today().year+1, step=1)
+                        annee_debut_arch = st.number_input("Année de début (sept)", min_value=2000, max_value=date.today().year+5, value=date.today().year, step=1)
+                        annee_fin_arch = st.number_input("Année de fin (sept)", min_value=2000, max_value=date.today().year+10, value=date.today().year+1, step=1)
                         commentaire = st.text_area("Commentaire")
                         col1, col2 = st.columns(2)
                         with col1:
@@ -856,10 +856,10 @@ elif st.session_state['role'] == 'paroisse':
                 date_debut_obj = convertir_en_date(a[4])
                 date_fin_obj = convertir_en_date(a[5])
                 duree = (date_fin_obj - date_debut_obj).days // 365 if (date_debut_obj and date_fin_obj) else 0
-                with st.expander(f"{icone} {a[1]} {a[2]} ({a[0]}) – {situation_affichee} – a médité {duree} an(s) avec nous - d'oct {date_debut_obj.year} à oct {date_fin_obj.year}"):
+                with st.expander(f"{icone} {a[1]} {a[2]} ({a[0]}) – {situation_affichee} – a médité {duree} an(s) avec nous - d'sept {date_debut_obj.year} à sept {date_fin_obj.year}"):
                     st.write(f"Ajouté par : {a[7]}")
                     if date_debut_obj and date_fin_obj:
-                        st.write(f"Période : Oct {date_debut_obj.year} – Oct {date_fin_obj.year} ({duree} an(s))")
+                        st.write(f"Période : sept {date_debut_obj.year} – sept {date_fin_obj.year} ({duree} an(s))")
                     if a[6]:
                         st.write(f"Commentaire : {a[6]}")
 
@@ -882,7 +882,7 @@ elif st.session_state['role'] == 'equipe':
     
     # Mes membres
     elif menu == "Mes membres":
-        st.markdown(f'<h2 style="color:#1A237E;">👤 Membres de {nom_equipe}</h2>', unsafe_allow_html=True)
+        st.markdown(f'<h2 style="color:#1A237E;">👤 membres de l'{nom_equipe}</h2>', unsafe_allow_html=True)
         nb = c.execute("SELECT COUNT(*) FROM membres WHERE equipe_id=? AND statut='actif'", (eid,)).fetchone()[0]
         st.info(f"{nb}/10 membres")
         if nb < 10:
@@ -937,8 +937,8 @@ elif st.session_state['role'] == 'equipe':
                 st.warning(f"Archivage de {membre_arch[0]} {membre_arch[1]} ({membre_arch[2]})")
                 with st.form("form_archive_eq"):
                     situation = st.radio("Situation", ["Déplacé", "Radié", "Défunt"])
-                    annee_debut_arch = st.number_input("Année de début (Oct)", min_value=2000, max_value=date.today().year+5, value=date.today().year, step=1)
-                    annee_fin_arch = st.number_input("Année de fin (Oct)", min_value=2000, max_value=date.today().year+10, value=date.today().year+1, step=1)
+                    annee_debut_arch = st.number_input("Année de début (sept)", min_value=2000, max_value=date.today().year+5, value=date.today().year, step=1)
+                    annee_fin_arch = st.number_input("Année de fin (sept)", min_value=2000, max_value=date.today().year+10, value=date.today().year+1, step=1)
                     commentaire = st.text_area("Commentaire")
                     col1, col2 = st.columns(2)
                     with col1:
@@ -1067,9 +1067,9 @@ elif st.session_state['role'] == 'equipe':
                     situation = st.radio("Situation", ["Déplacé", "Radié", "Défunt"])
                     col1, col2 = st.columns(2)
                     with col1:
-                        annee_debut_arch = st.number_input("Année de début (Oct)", min_value=2000, max_value=date.today().year+5, value=date.today().year, step=1)
+                        annee_debut_arch = st.number_input("Année de début (sept)", min_value=2000, max_value=date.today().year+5, value=date.today().year, step=1)
                     with col2:
-                        annee_fin_arch = st.number_input("Année de fin (Oct)", min_value=2000, max_value=date.today().year+10, value=date.today().year+1, step=1)
+                        annee_fin_arch = st.number_input("Année de fin (sept)", min_value=2000, max_value=date.today().year+10, value=date.today().year+1, step=1)
                     commentaire = st.text_area("Commentaire (optionnel)")
                     
                     if st.form_submit_button("Archiver"):
@@ -1101,16 +1101,16 @@ elif st.session_state['role'] == 'equipe':
                     annee_fin_aff = "?"
                 
                 situation_affichee = afficher_situation(situation)
-                with st.expander(f"{nom} {prenom} ({matricule}) – {situation_affichee} – a médité {duree} an(s) avec nous - d'oct {annee_debut_aff} à oct {annee_fin_aff}"):
+                with st.expander(f"{nom} {prenom} ({matricule}) – {situation_affichee} – a médité {duree} an(s) avec nous - d'sept {annee_debut_aff} à sept {annee_fin_aff}"):
                     with st.form(f"edit_arch_{arch_id}"):
                         new_situation = st.selectbox("Situation", ["Déplacé", "Radié", "Défunt"],
                                                      index=["Déplacé","Radié","Défunt"].index(situation) if situation in ["Déplacé","Radié","Défunt"] else 0)
                         col1, col2 = st.columns(2)
                         with col1:
-                            new_annee_debut = st.number_input("Année début (Oct)", min_value=2000, max_value=date.today().year+5,
+                            new_annee_debut = st.number_input("Année début (sept)", min_value=2000, max_value=date.today().year+5,
                                                                value=date_debut_obj.year if date_debut_obj else date.today().year, step=1)
                         with col2:
-                            new_annee_fin = st.number_input("Année fin (Oct)", min_value=2000, max_value=date.today().year+10,
+                            new_annee_fin = st.number_input("Année fin (sept)", min_value=2000, max_value=date.today().year+10,
                                                             value=date_fin_obj.year if date_fin_obj else date.today().year+1, step=1)
                         new_comment = st.text_area("Commentaire", value=commentaire or "")
                         col1, col2 = st.columns(2)

@@ -214,6 +214,26 @@ def afficher_rappels_reabonnement_whatsapp(annee_debut, equipe_id=None):
     else:
         st.success(f"🎉 Tous les membres sont à jour pour la période {periode_affichage(annee_debut)} !")
 
+def transferer_membre(membre_id, nouvelle_paroisse_id, nouvelle_equipe_id, motif, auteur_id, auteur_nom, auteur_role):
+    ancien = c.execute("SELECT paroisse_id, equipe_id FROM membres WHERE id=?", (membre_id,)).fetchone()
+    if not ancien:
+        return False, "Membre introuvable"
+    ancienne_paroisse, ancienne_equipe = ancien
+    # Vérification que l'équipe destination appartient bien à la paroisse destination
+    verif = c.execute("SELECT id FROM equipes WHERE id=? AND paroisse_id=?", (nouvelle_equipe_id, nouvelle_paroisse_id)).fetchone()
+    if not verif:
+        return False, "L'équipe sélectionnée n'appartient pas à la paroisse de destination"
+    # Mise à jour du membre
+    c.execute("UPDATE membres SET paroisse_id=?, equipe_id=? WHERE id=?", (nouvelle_paroisse_id, nouvelle_equipe_id, membre_id))
+    # Enregistrement du mouvement
+    c.execute('''INSERT INTO mouvements (membre_id, date_mouvement, ancienne_paroisse_id, nouvelle_paroisse_id,
+                                         ancienne_equipe_id, nouvelle_equipe_id, motif, auteur_id, auteur_nom, auteur_role)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+              (membre_id, date.today(), ancienne_paroisse, nouvelle_paroisse_id,
+               ancienne_equipe, nouvelle_equipe_id, motif, auteur_id, auteur_nom, auteur_role))
+    conn.commit()
+    return True, "Transfert effectué avec succès"
+
 # --- Export Excel (avec gestion d'erreur du moteur) ---
 def exporter_excel_diocese():
     output = io.BytesIO()
@@ -271,18 +291,23 @@ c.execute('''CREATE TABLE IF NOT EXISTS membres (id INTEGER PRIMARY KEY, matricu
 c.execute('''CREATE TABLE IF NOT EXISTS utilisateurs (id INTEGER PRIMARY KEY, username TEXT UNIQUE, password TEXT, role TEXT, diocese_id INTEGER, paroisse_id INTEGER, equipe_id INTEGER)''')
 c.execute('''CREATE TABLE IF NOT EXISTS abonnements (id INTEGER PRIMARY KEY, membre_id INTEGER, annee_debut INTEGER, date_paiement DATE, montant REAL DEFAULT 0, type_abonnement TEXT DEFAULT 'abonnement', statut TEXT DEFAULT 'non_paye')''')
 c.execute('''CREATE TABLE IF NOT EXISTS archives (id INTEGER PRIMARY KEY, membre_id INTEGER, situation TEXT, date_debut DATE, date_fin DATE, commentaire TEXT, auteur_id INTEGER, auteur_nom TEXT, auteur_role TEXT, paroisse_id INTEGER, equipe_id INTEGER)''')
+c.execute('''CREATE TABLE IF NOT EXISTS mouvements (id INTEGER PRIMARY KEY, membre_id INTEGER, date_mouvement DATE, ancienne_paroisse_id INTEGER, nouvelle_paroisse_id INTEGER, ancienne_equipe_id INTEGER, nouvelle_equipe_id INTEGER, motif TEXT, auteur_id INTEGER, auteur_nom TEXT, auteur_role TEXT)''')
 conn.commit()
 
 # --- Migrations : ajout des colonnes manquantes ---
-for col in ['statut', 'annee_debut', 'situation', 'date_debut', 'date_fin']:
-    try: c.execute(f"ALTER TABLE membres ADD COLUMN {col}"); conn.commit()
-    except: pass
+# --- for col in ['statut', 'annee_debut', 'situation', 'date_debut', 'date_fin']: ---
+try: c.execute("ALTER TABLE membres ADD COLUMN statut TEXT DEFAULT 'actif'"); conn.commit()
+except: pass
+
 try: c.execute("ALTER TABLE abonnements ADD COLUMN annee_debut INTEGER"); conn.commit()
 except: pass
+
 try: c.execute("ALTER TABLE archives ADD COLUMN situation TEXT"); conn.commit()
 except: pass
+
 try: c.execute("ALTER TABLE archives ADD COLUMN date_debut DATE"); conn.commit()
 except: pass
+
 try: c.execute("ALTER TABLE archives ADD COLUMN date_fin DATE"); conn.commit()
 except: pass
 
@@ -353,7 +378,7 @@ if st.sidebar.button("Déconnexion"):
     st.rerun()
 
 # --- Titre principal ---
-st.markdown('<h1 style="color:#1A237E;">📿 GESTIONNAIRE DES ÉQUIPES DU ROSAIRE</h1>', unsafe_allow_html=True)
+st.markdown('<h1 style="color:#1A237E; white-space: nowrap;">📿 GESTIONNAIRE DES ÉQUIPES DU ROSAIRE</h1>', unsafe_allow_html=True)
 st.markdown("---")
 
 # ==================== DIOCÈSE ====================
@@ -483,10 +508,10 @@ if st.session_state['role'] == 'diocese':
         for p in paroisses:
             with st.expander(f"🏛️ {p[1]}"):
                 stats = c.execute('''SELECT COUNT(m.id) as total, 
-                                            SUM(CASE WHEN a.annee_debut=? AND a.statut='paye' THEN 1 ELSE 0 END) as payes
-                                     FROM membres m
-                                     LEFT JOIN abonnements a ON m.id=a.membre_id AND a.annee_debut=?
-                                     WHERE m.paroisse_id=? AND m.statut='actif''', (annee_debut, annee_debut, p[0])).fetchone()
+                            SUM(CASE WHEN a.annee_debut=? AND a.statut='paye' THEN 1 ELSE 0 END) as payes
+                     FROM membres m
+                     LEFT JOIN abonnements a ON m.id=a.membre_id AND a.annee_debut=?
+                     WHERE m.paroisse_id=? AND m.statut=?''', (annee_debut, annee_debut, p[0], 'actif')).fetchone()
                 st.write(f"Total membres : {stats[0]} – À jour : {stats[1]}")
                 equipes = c.execute("SELECT id, nom_equipe FROM equipes WHERE paroisse_id=?", (p[0],)).fetchall()
                 for eq in equipes:
@@ -544,10 +569,9 @@ if st.session_state['role'] == 'diocese':
                 date_debut_obj = convertir_en_date(a[4])
                 date_fin_obj = convertir_en_date(a[5])
                 duree = (date_fin_obj - date_debut_obj).days // 365 if (date_debut_obj and date_fin_obj) else 0
-                with st.expander(f"{icone} {a[1]} {a[2]} ({a[0]}) – {situation_affichee} – {a[5]}"):
-                    st.write(f"Ajouté par : {a[9]}")
+                with st.expander(f"{icone} {a[1]} {a[2]} ({a[0]}) – {situation_affichee} – a médité {duree} an(s) avec nous - d'oct {date_debut_obj.year} à oct {date_fin_obj.year}"):
+                    st.write(f"Ajouté par : {a[8]}")
                     st.write(f"Paroisse : {a[7]}")
-                    st.write(f"Équipe : {a[8]}")
                     if date_debut_obj and date_fin_obj:
                         st.write(f"Période : Oct {date_debut_obj.year} – Oct {date_fin_obj.year} ({duree} an(s))")
                     if a[6]:
@@ -670,9 +694,11 @@ elif st.session_state['role'] == 'paroisse':
                         if st.button("✏️ Modifier", key=f"mod_{m[0]}"):
                             st.session_state['modif_membre_id'] = m[0]
                             st.rerun()
-                        # Remplacer le bouton Supprimer par Archiver avec confirmation
                         if st.button("📦 Archiver", key=f"arch_{m[0]}"):
                             st.session_state['archive_membre_id'] = m[0]
+                            st.rerun()
+                        if st.button("🔄 Transférer", key=f"transf_{m[0]}"):
+                            st.session_state['transfert_membre_id'] = m[0]
                             st.rerun()
             # Gestion de l'archivage
             if 'archive_membre_id' in st.session_state:
@@ -702,6 +728,51 @@ elif st.session_state['role'] == 'paroisse':
                             if st.form_submit_button("Annuler"):
                                 del st.session_state['archive_membre_id']
                                 st.rerun()
+
+
+            # Gestion du transfert
+            if 'transfert_membre_id' in st.session_state:
+                mid_transfert = st.session_state['transfert_membre_id']
+                membre_info = c.execute("SELECT nom, prenom, matricule, equipe_id FROM membres WHERE id=?", (mid_transfert,)).fetchone()
+                if membre_info:
+                    st.markdown("---")
+                    st.subheader(f"🔄 Transfert de {membre_info[0]} {membre_info[1]} ({membre_info[2]})")
+                    with st.form("form_transfert_paroisse"):
+                        # Sélection de la paroisse de destination
+                        paroisses = c.execute("SELECT id, nom FROM paroisses ORDER BY nom").fetchall()
+                        paroisse_dest = st.selectbox("Paroisse de destination", paroisses, format_func=lambda x: x[1])
+                        nouvelle_paroisse_id = paroisse_dest[0]
+                        
+                        # Sélection de l'équipe de destination dans cette paroisse
+                        equipes_dest = c.execute("SELECT id, nom_equipe FROM equipes WHERE paroisse_id=? ORDER BY nom_equipe", (nouvelle_paroisse_id,)).fetchall()
+                        if equipes_dest:
+                            equipe_dest = st.selectbox("Équipe de destination", equipes_dest, format_func=lambda x: x[1])
+                            nouvelle_equipe_id = equipe_dest[0]
+                        else:
+                            st.error("Aucune équipe dans cette paroisse. Créez-en une d'abord.")
+                            nouvelle_equipe_id = None
+                        
+                        motif = st.text_area("Motif du transfert (optionnel)")
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.form_submit_button("Confirmer le transfert"):
+                                if nouvelle_equipe_id:
+                                    success, msg = transferer_membre(mid_transfert, nouvelle_paroisse_id, nouvelle_equipe_id, motif,
+                                                                      st.session_state['user_id'], st.session_state['username'], 'paroisse')
+                                    if success:
+                                        st.success(msg)
+                                        del st.session_state['transfert_membre_id']
+                                        st.rerun()
+                                    else:
+                                        st.error(msg)
+                        with col2:
+                            if st.form_submit_button("Annuler"):
+                                del st.session_state['transfert_membre_id']
+                                st.rerun()
+
+
+
             # Modification de membre
             if 'modif_membre_id' in st.session_state:
                 mid = st.session_state['modif_membre_id']
@@ -757,7 +828,7 @@ elif st.session_state['role'] == 'paroisse':
                 if deja:
                     type_ = c.execute("SELECT type_abonnement FROM abonnements WHERE membre_id=? AND annee_debut=?", (m[0], annee_debut)).fetchone()
                     type_ = type_[0] if type_ else "abonnement"
-                    st.info(f"{m[1]} {m[2]} ({m[3]}) – ✅ Déjà {type_}")
+                    st.info(f"{m[1]} {m[2]} ({m[3]}) – ✅ {type_} effectué")
                 else:
                     with st.expander(f"{m[1]} {m[2]} ({m[3]}) – ❌ Non enregistré"):
                         # Remplacement des checkboxes par un radio
@@ -777,7 +848,7 @@ elif st.session_state['role'] == 'paroisse':
                                        WHERE m.equipe_id=? AND a.annee_debut=? AND a.type_abonnement='abonnement' AND a.statut='paye'
                                        ORDER BY m.nom''', (eid, annee_debut)).fetchall()
                 for a in abonnes:
-                    st.write(f"- {a[0]} {a[1]} ({a[2]}) – payé le {a[3]} : {a[4]} FCFA")
+                    st.write(f"- {a[0]} {a[1]} ({a[2]}) – a payé le {a[3]} : {a[4]} FCFA")
             with tab_liste[1]:
                 reabonnes = c.execute('''SELECT m.nom, m.prenom, m.matricule, a.date_paiement, a.montant
                                          FROM membres m
@@ -785,7 +856,7 @@ elif st.session_state['role'] == 'paroisse':
                                          WHERE m.equipe_id=? AND a.annee_debut=? AND a.type_abonnement='reabonnement' AND a.statut='paye'
                                          ORDER BY m.nom''', (eid, annee_debut)).fetchall()
                 for r in reabonnes:
-                    st.write(f"- {r[0]} {r[1]} ({r[2]}) – payé le {r[3]} : {r[4]} FCFA")
+                    st.write(f"- {r[0]} {r[1]} ({r[2]}) – a payé le {r[3]} : {r[4]} FCFA")
             with tab_liste[2]:
                 non_inscrits = c.execute('''SELECT m.nom, m.prenom, m.matricule
                                             FROM membres m
@@ -834,7 +905,7 @@ elif st.session_state['role'] == 'paroisse':
     
     # Archives (lecture seule)
     elif menu == "Archives":
-        st.markdown(f'<h2 style="color:#1A237E;">📦 Archives de la paroisse {nom_paroisse}</h2>', unsafe_allow_html=True)
+        st.markdown(f'<h2 style="color:#1A237E; ; white-space: nowrap;">📦 Archives de la paroisse {nom_paroisse}</h2>', unsafe_allow_html=True)
         archives = c.execute('''
             SELECT m.matricule, m.nom, m.prenom, a.situation, a.date_debut, a.date_fin, a.commentaire,
                    e.nom_equipe as equipe, a.auteur_nom
@@ -853,9 +924,8 @@ elif st.session_state['role'] == 'paroisse':
                 date_debut_obj = convertir_en_date(a[4])
                 date_fin_obj = convertir_en_date(a[5])
                 duree = (date_fin_obj - date_debut_obj).days // 365 if (date_debut_obj and date_fin_obj) else 0
-                with st.expander(f"{icone} {a[1]} {a[2]} ({a[0]}) – {situation_affichee} – {a[5]}"):
-                    st.write(f"Ajouté par : {a[8]}")
-                    st.write(f"Équipe : {a[7]}")
+                with st.expander(f"{icone} {a[1]} {a[2]} ({a[0]}) – {situation_affichee} – a médité {duree} an(s) avec nous - d'oct {date_debut_obj.year} à oct {date_fin_obj.year}"):
+                    st.write(f"Ajouté par : {a[7]}")
                     if date_debut_obj and date_fin_obj:
                         st.write(f"Période : Oct {date_debut_obj.year} – Oct {date_fin_obj.year} ({duree} an(s))")
                     if a[6]:
@@ -1015,7 +1085,7 @@ elif st.session_state['role'] == 'equipe':
                                    WHERE m.equipe_id=? AND a.annee_debut=? AND a.type_abonnement='abonnement' AND a.statut='paye'
                                    ORDER BY m.nom''', (eid, annee_debut)).fetchall()
             for a in abonnes:
-                st.write(f"- {a[0]} {a[1]} ({a[2]}) – payé le {a[3]} : {a[4]} FCFA")
+                st.write(f"- {a[0]} {a[1]} ({a[2]}) – a payé le {a[3]} : {a[4]} FCFA")
         with tab_liste[1]:
             reabonnes = c.execute('''SELECT m.nom, m.prenom, m.matricule, a.date_paiement, a.montant
                                      FROM membres m
@@ -1023,7 +1093,7 @@ elif st.session_state['role'] == 'equipe':
                                      WHERE m.equipe_id=? AND a.annee_debut=? AND a.type_abonnement='reabonnement' AND a.statut='paye'
                                      ORDER BY m.nom''', (eid, annee_debut)).fetchall()
             for r in reabonnes:
-                st.write(f"- {r[0]} {r[1]} ({r[2]}) – payé le {r[3]} : {r[4]} FCFA")
+                st.write(f"- {r[0]} {r[1]} ({r[2]}) – a payé le {r[3]} : {r[4]} FCFA")
         with tab_liste[2]:
             non_inscrits = c.execute('''SELECT m.nom, m.prenom, m.matricule
                                         FROM membres m
@@ -1099,7 +1169,7 @@ elif st.session_state['role'] == 'equipe':
                     annee_fin_aff = "?"
                 
                 situation_affichee = afficher_situation(situation)
-                with st.expander(f"{nom} {prenom} ({matricule}) – {situation_affichee} – {duree} an(s) - Oct {annee_debut_aff} – Oct {annee_fin_aff}"):
+                with st.expander(f"{nom} {prenom} ({matricule}) – {situation_affichee} – a médité {duree} an(s) avec nous - d'oct {annee_debut_aff} à oct {annee_fin_aff}"):
                     with st.form(f"edit_arch_{arch_id}"):
                         new_situation = st.selectbox("Situation", ["Déplacé", "Radié", "Défunt"],
                                                      index=["Déplacé","Radié","Défunt"].index(situation) if situation in ["Déplacé","Radié","Défunt"] else 0)

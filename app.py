@@ -882,7 +882,7 @@ elif st.session_state['role'] == 'equipe':
     
     # Mes membres
     elif menu == "Mes membres":
-        st.markdown(f'<h2 style="color:#1A237E;">👤 membres de {l'nom_equipe}</h2>', unsafe_allow_html=True)
+        st.markdown(f'<h2 style="color:#1A237E;">👤 membres de {"l'"nom_equipe}</h2>', unsafe_allow_html=True)
         nb = c.execute("SELECT COUNT(*) FROM membres WHERE equipe_id=? AND statut='actif'", (eid,)).fetchone()[0]
         st.info(f"{nb}/10 membres")
         if nb < 10:

@@ -624,7 +624,7 @@ elif st.session_state['role'] == 'paroisse':
     
     # Membres
     elif menu == "Membres":
-        st.markdown(f'<h2 style="color:#1A237E; white-space: nowrap;">👤 Membres de {nom_paroisse}</h2>', unsafe_allow_html=True)
+        st.markdown(f'<h2 style="color:#1A237E; white-space: nowrap;">👤 Membres de "l'"{nom_paroisse}</h2>', unsafe_allow_html=True)
         equipes = c.execute("SELECT id, nom_equipe FROM equipes WHERE paroisse_id=? ORDER BY nom_equipe", (pid,)).fetchall()
         if not equipes:
             st.warning("Aucune équipe. Créez une équipe d'abord.")
@@ -882,7 +882,7 @@ elif st.session_state['role'] == 'equipe':
     
     # Mes membres
     elif menu == "Mes membres":
-        st.markdown(f'<h2 style="color:#1A237E;">👤 membres de {"l'"nom_equipe}</h2>', unsafe_allow_html=True)
+        st.markdown(f'<h2 style="color:#1A237E;">👤 membres de {nom_equipe}</h2>', unsafe_allow_html=True)
         nb = c.execute("SELECT COUNT(*) FROM membres WHERE equipe_id=? AND statut='actif'", (eid,)).fetchone()[0]
         st.info(f"{nb}/10 membres")
         if nb < 10:

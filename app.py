@@ -453,7 +453,7 @@ if st.session_state['role'] == 'diocese':
     # Abonnements (consultation)
     elif menu == "📅 Abonnements":
         st.markdown('<h2 style="color:#1A237E;">📅 Suivi des abonnements (Diocèse)</h2>', unsafe_allow_html=True)
-        annee_debut = st.number_input("Année de début de la période", min_value=2020, max_value=date.today().year+1, value=date.today().year, step=1)
+        annee_debut = st.number_input("Année de début de la période", min_value=2020, max_value=date.today().year, value=date.today().year-1, step=1)
         st.write(f"**Période :** {periode_affichage(annee_debut)}")
         total_membres = c.execute("SELECT COUNT(*) FROM membres WHERE statut='actif'").fetchone()[0]
         payes = c.execute("SELECT COUNT(*) FROM abonnements WHERE annee_debut=? AND statut='paye'", (annee_debut,)).fetchone()[0]
@@ -733,7 +733,7 @@ elif st.session_state['role'] == 'paroisse':
     # Abonnements
     elif menu == "Abonnements":
         st.markdown(f'<h2 style="color:#1A237E;">💰 Gestion des abonnements - {nom_paroisse}</h2>', unsafe_allow_html=True)
-        annee_debut = st.number_input("Année de début de la période", min_value=2020, max_value=date.today().year+1, value=date.today().year, step=1)
+        annee_debut = st.number_input("Année de début de la période", min_value=2020, max_value=date.today().year, value=date.today().year-1, step=1)
         st.write(f"**Période :** {periode_affichage(annee_debut)}")
         equipes = c.execute("SELECT id, nom_equipe FROM equipes WHERE paroisse_id=?", (pid,)).fetchall()
         if equipes:
@@ -965,7 +965,7 @@ elif st.session_state['role'] == 'equipe':
     # Abonnements
     elif menu == "Abonnements":
         st.markdown(f'<h2 style="color:#1A237E;">💰 Gestion des abonnements - {nom_equipe}</h2>', unsafe_allow_html=True)
-        annee_debut = st.number_input("Année de début de la période", min_value=2020, max_value=date.today().year+1, value=date.today().year, step=1)
+        annee_debut = st.number_input("Année de début de la période", min_value=2020, max_value=date.today().year, value=date.today().year-1, step=1)
         st.write(f"**Période :** {periode_affichage(annee_debut)}")
         membres = c.execute("SELECT id, nom, prenom, matricule FROM membres WHERE equipe_id=? AND statut='actif' ORDER BY nom", (eid,)).fetchall()
         for m in membres:

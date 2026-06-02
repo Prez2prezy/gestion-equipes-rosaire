@@ -1055,7 +1055,7 @@ elif st.session_state['role'] == 'paroisse':
             st.write(f"Responsable : {p[2]}")
             st.write(f"Bureau : {p[3]}")
 
-    # Mes équipes (Paroisse) - Version fluidifiée
+    # Mes équipes (Paroisse) - Version corrigée
     elif menu == "Mes équipes":
         st.markdown(f'<h2 style="color:#1A237E;">👥 Équipes de {nom_paroisse}</h2>', unsafe_allow_html=True)
         
@@ -1064,6 +1064,8 @@ elif st.session_state['role'] == 'paroisse':
             st.session_state['show_equipe_details'] = None
         if 'show_membres_equipe_par' not in st.session_state:
             st.session_state['show_membres_equipe_par'] = None
+        if 'new_equipe_info' not in st.session_state:
+            st.session_state['new_equipe_info'] = None
         
         info_paroisse = c.execute("SELECT nom, commune FROM paroisses WHERE id=?", (pid,)).fetchone()
         nom_clean = info_paroisse[0].lower()
@@ -1078,26 +1080,58 @@ elif st.session_state['role'] == 'paroisse':
                 nom_eq = st.text_input("Nom de l'équipe (ex: 3, Jeune, Enfant)")
                 responsable = st.text_input("Responsable")
                 bureau = st.text_area("Bureau")
-                if st.form_submit_button("Créer"):
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    submitted = st.form_submit_button("Créer")
+                
+                if submitted:
                     if nom_eq and responsable:
-                        nb = c.execute("SELECT COUNT(*) FROM equipes WHERE paroisse_id=?", (pid,)).fetchone()[0]
-                        identifiant = f"{prefixe}eq{nb+1}"
-                        mdp = generer_mot_de_passe()
-                        c.execute("INSERT INTO equipes (nom_equipe, responsable, bureau, paroisse_id) VALUES (?,?,?,?)", 
-                                (nom_eq, responsable, bureau, pid))
-                        eid_new = c.lastrowid
-                        c.execute("INSERT INTO utilisateurs (username, password, role, paroisse_id, equipe_id) VALUES (?,?,?,?,?)", 
-                                (identifiant, hash_password(mdp), "equipe", pid, eid_new))
-                        conn.commit()
-                        st.success(f"✅ Équipe '{nom_eq}' créée")
-                        st.code(f"Identifiant : {identifiant}\nMot de passe : {mdp}", language="text")
-                        st.rerun()
+                        # Vérification des doublons
+                        existe = c.execute("SELECT id FROM equipes WHERE nom_equipe=? AND paroisse_id=?", (nom_eq, pid)).fetchone()
+                        if existe:
+                            st.error(f"❌ Une équipe nommée '{nom_eq}' existe déjà dans cette paroisse !")
+                        else:
+                            nb = c.execute("SELECT COUNT(*) FROM equipes WHERE paroisse_id=?", (pid,)).fetchone()[0]
+                            identifiant = f"{prefixe}eq{nb+1}"
+                            mdp = generer_mot_de_passe()
+                            c.execute("INSERT INTO equipes (nom_equipe, responsable, bureau, paroisse_id) VALUES (?,?,?,?)", 
+                                    (nom_eq, responsable, bureau, pid))
+                            eid_new = c.lastrowid
+                            c.execute("INSERT INTO utilisateurs (username, password, role, paroisse_id, equipe_id) VALUES (?,?,?,?,?)", 
+                                    (identifiant, hash_password(mdp), "equipe", pid, eid_new))
+                            conn.commit()
+                            
+                            # Stocker les infos dans session_state pour affichage instantané
+                            st.session_state['new_equipe_info'] = {
+                                'nom': nom_eq,
+                                'identifiant': identifiant,
+                                'mdp': mdp
+                            }
+                            st.rerun()
                     else:
                         st.error("Le nom et le responsable sont requis")
+            
+            # Affichage des informations de la nouvelle équipe (hors formulaire)
+            if st.session_state.get('new_equipe_info'):
+                info = st.session_state['new_equipe_info']
+                st.success(f"✅ Équipe '{info['nom']}' créée avec succès !")
+                st.markdown(f"""
+                <div style='background-color: #e8f5e9; padding: 15px; border-radius: 10px; margin-top: 10px;'>
+                    <strong>🔑 Identifiant :</strong> <code>{info['identifiant']}</code><br>
+                    <strong>🔒 Mot de passe :</strong> <code>{info['mdp']}</code><br>
+                    <small>⚠️ Veuillez noter ces informations. Le mot de passe devra être changé à la première connexion.</small>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Bouton pour effacer le message
+                if st.button("OK", key="clear_equipe_info"):
+                    st.session_state['new_equipe_info'] = None
+                    st.rerun()
         
         st.markdown("---")
         
-        # Liste des équipes
+        # Liste des équipes existantes
         equipes = c.execute("SELECT id, nom_equipe, responsable, bureau FROM equipes WHERE paroisse_id=? ORDER BY nom_equipe", (pid,)).fetchall()
         
         if not equipes:
@@ -1175,6 +1209,12 @@ elif st.session_state['role'] == 'paroisse':
                     if st.session_state.get('show_equipe_details') == eq_id:
                         st.markdown("---")
                         st.markdown(f"#### ⚙️ Gestion de {eq_nom}")
+                        
+                        # Affichage des identifiants de connexion
+                        user_info = c.execute("SELECT username FROM utilisateurs WHERE equipe_id=? AND role='equipe'", (eq_id,)).fetchone()
+                        if user_info:
+                            st.info(f"🔑 Identifiant de connexion : `{user_info[0]}`")
+                        
                         with st.form(f"form_gerer_equipe_{eq_id}"):
                             new_nom = st.text_input("Nom de l'équipe", value=eq_nom)
                             new_resp = st.text_input("Responsable", value=eq_resp)
@@ -1183,12 +1223,26 @@ elif st.session_state['role'] == 'paroisse':
                             col1, col2 = st.columns(2)
                             with col1:
                                 if st.form_submit_button("💾 Mettre à jour"):
-                                    c.execute("UPDATE equipes SET nom_equipe=?, responsable=?, bureau=? WHERE id=?", 
-                                            (new_nom, new_resp, new_bureau, eq_id))
-                                    conn.commit()
-                                    st.success("Équipe mise à jour")
-                                    st.session_state['show_equipe_details'] = None
-                                    st.rerun()
+                                    # Vérification des doublons lors de la modification
+                                    if new_nom != eq_nom:
+                                        existe = c.execute("SELECT id FROM equipes WHERE nom_equipe=? AND paroisse_id=? AND id!=?", (new_nom, pid, eq_id)).fetchone()
+                                        if existe:
+                                            st.error(f"❌ Une équipe nommée '{new_nom}' existe déjà dans cette paroisse !")
+                                        else:
+                                            c.execute("UPDATE equipes SET nom_equipe=?, responsable=?, bureau=? WHERE id=?", 
+                                                    (new_nom, new_resp, new_bureau, eq_id))
+                                            conn.commit()
+                                            st.success("Équipe mise à jour")
+                                            st.session_state['show_equipe_details'] = None
+                                            st.rerun()
+                                    else:
+                                        c.execute("UPDATE equipes SET nom_equipe=?, responsable=?, bureau=? WHERE id=?", 
+                                                (new_nom, new_resp, new_bureau, eq_id))
+                                        conn.commit()
+                                        st.success("Équipe mise à jour")
+                                        st.session_state['show_equipe_details'] = None
+                                        st.rerun()
+                            
                             with col2:
                                 if nb_membres == 0:
                                     if st.form_submit_button("🗑️ Supprimer l'équipe"):
@@ -1199,8 +1253,17 @@ elif st.session_state['role'] == 'paroisse':
                                         st.session_state['show_equipe_details'] = None
                                         st.rerun()
                                 else:
-                                    st.warning(f"Impossible de supprimer : {nb_membres} membre(s) dans cette équipe")
-    
+                                    st.warning(f"⚠️ Impossible de supprimer : {nb_membres} membre(s) dans cette équipe")
+                        
+                        # Bouton pour réinitialiser le mot de passe
+                        if user_info:
+                            if st.button(f"🔄 Réinitialiser le mot de passe", key=f"reset_mdp_{eq_id}"):
+                                nouveau_mdp = generer_mot_de_passe()
+                                c.execute("UPDATE utilisateurs SET password=? WHERE equipe_id=?", (hash_password(nouveau_mdp), eq_id))
+                                conn.commit()
+                                st.success("Mot de passe réinitialisé !")
+                                st.code(f"Nouveau mot de passe : {nouveau_mdp}", language="text")
+            
     # Membres (Paroisse) - Version fluidifiée avec gestion unique
     elif menu == "Membres":
         st.markdown(f'<h2 style="color:#1A237E;">👤 Membres de {nom_paroisse}</h2>', unsafe_allow_html=True)

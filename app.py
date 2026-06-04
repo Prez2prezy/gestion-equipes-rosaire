@@ -1,7 +1,3 @@
-Gmail	ahua innocent MOTIAN TOFFE <grandprezy@gmail.com>
-App5
-ahua innocent MOTIAN TOFFE <grandprezy@gmail.com>	4 juin 2026 à 08:03
-À : kaminno66@gmail.com
 import streamlit as st
 import sqlite3
 from datetime import date, timedelta
@@ -96,64 +92,23 @@ def supprimer_photo(photo_path):
     if photo_path and os.path.exists(photo_path):
         os.remove(photo_path)
 
-# --- Fonctions de vérification ---
-def equipe_existe(paroisse_id, nom_equipe, exclude_id=None):
-    if exclude_id:
-        query = "SELECT id FROM equipes WHERE paroisse_id=? AND nom_equipe=? AND id != ?"
-        params = (paroisse_id, nom_equipe, exclude_id)
-    else:
-        query = "SELECT id FROM equipes WHERE paroisse_id=? AND nom_equipe=?"
-        params = (paroisse_id, nom_equipe)
-    return c.execute(query, params).fetchone() is not None
-
-def paroisse_existe(nom, commune, ville, exclude_id=None):
-    if exclude_id:
-        query = "SELECT id FROM paroisses WHERE nom=? AND commune=? AND ville=? AND id != ?"
-        params = (nom, commune, ville, exclude_id)
-    else:
-        query = "SELECT id FROM paroisses WHERE nom=? AND commune=? AND ville=?"
-        params = (nom, commune, ville)
-    return c.execute(query, params).fetchone() is not None
-
-def membre_existe_deja(nom, prenom, date_naissance, exclude_id=None):
-    if exclude_id:
-        query = "SELECT id FROM membres WHERE nom=? AND prenom=? AND date_naissance=? AND id != ?"
-        params = (nom, prenom, date_naissance, exclude_id)
-    else:
-        query = "SELECT id FROM membres WHERE nom=? AND prenom=? AND date_naissance=?"
-        params = (nom, prenom, date_naissance)
-    return c.execute(query, params).fetchone() is not None
-
-# --- Fonctions pour les abonnements (compatibilité ancienne/nouvelle base) ---
-def get_colonne_annee():
-    try:
-        c.execute("SELECT annee_debut FROM abonnements LIMIT 1")
-        return 'annee_debut'
-    except sqlite3.OperationalError:
-        return 'annee'
-
+# --- Fonctions pour les abonnements ---
 def enregistrer_abonnement(membre_id, annee_debut, montant=0, type_abonnement='abonnement'):
     date_paiement = date.today()
-    colonne = get_colonne_annee()
-    if colonne == 'annee_debut':
-        existant = c.execute("SELECT id FROM abonnements WHERE membre_id=? AND annee_debut=?", (membre_id, annee_debut)).fetchone()
-    else:
-        existant = c.execute("SELECT id FROM abonnements WHERE membre_id=? AND annee=?", (membre_id, annee_debut)).fetchone()
+    existant = c.execute("SELECT id FROM abonnements WHERE membre_id=? AND annee_debut=?", (membre_id, annee_debut)).fetchone()
     if existant:
-        c.execute(f"UPDATE abonnements SET date_paiement=?, montant=?, type_abonnement=?, statut='paye' WHERE id=?", (date_paiement, montant, type_abonnement, existant[0]))
+        c.execute("UPDATE abonnements SET date_paiement=?, montant=?, type_abonnement=?, statut='paye' WHERE id=?",
+                  (date_paiement, montant, type_abonnement, existant[0]))
     else:
-        if colonne == 'annee_debut':
-            c.execute("INSERT INTO abonnements (membre_id, annee_debut, date_paiement, montant, type_abonnement, statut) VALUES (?,?,?,?,?,?)", (membre_id, annee_debut, date_paiement, montant, type_abonnement, 'paye'))
-        else:
-            c.execute("INSERT INTO abonnements (membre_id, annee, date_paiement, montant, type_abonnement, statut) VALUES (?,?,?,?,?,?)", (membre_id, annee_debut, date_paiement, montant, type_abonnement, 'paye'))
+        c.execute('''INSERT INTO abonnements (membre_id, annee_debut, date_paiement, montant, type_abonnement, statut)
+                     VALUES (?, ?, ?, ?, ?, ?)''',
+                  (membre_id, annee_debut, date_paiement, montant, type_abonnement, 'paye'))
     conn.commit()
 
 def verifier_abonnement(membre_id, annee_debut):
-    colonne = get_colonne_annee()
-    if colonne == 'annee_debut':
-        result = c.execute("SELECT id FROM abonnements WHERE membre_id=? AND annee_debut=? AND statut='paye'", (membre_id, annee_debut)).fetchone()
-    else:
-        result = c.execute("SELECT id FROM abonnements WHERE membre_id=? AND annee=? AND statut='paye'", (membre_id, annee_debut)).fetchone()
+    result = c.execute('''SELECT id FROM abonnements 
+                          WHERE membre_id = ? AND annee_debut = ? AND statut = 'paye' ''',
+                       (membre_id, annee_debut)).fetchone()
     return result is not None
 
 def periode_affichage(annee_debut):
@@ -271,7 +226,7 @@ def exporter_excel_diocese():
                                    ORDER BY a.annee_debut DESC, m.nom''').fetchall()
         if abonnements:
             df = pd.DataFrame(abonnements, columns=["ID", "Matricule", "Nom", "Prénom", "Année début", "Date paiement", "Montant", "Type"])
-            df["Période"] = df["Année début"].apply(lambda x: f"Oct {x} – Oct {x+1}" if x else "")
+            df["Période"] = df["Année début"].apply(lambda x: f"Oct {x} – Oct {x+1}")
             df.to_excel(writer, sheet_name="Abonnements", index=False)
         archives = c.execute('''SELECT m.matricule, m.nom, m.prenom, a.situation, a.date_debut, a.date_fin, a.commentaire,
                                        p.nom as paroisse, e.nom_equipe as equipe
@@ -286,7 +241,7 @@ def exporter_excel_diocese():
     output.seek(0)
     return output
 
-# --- Création des tables (avec compatibilité) ---
+# --- Création des tables ---
 c.execute('''CREATE TABLE IF NOT EXISTS diocese (id INTEGER PRIMARY KEY, nom TEXT, responsable TEXT, bureau TEXT)''')
 c.execute('''CREATE TABLE IF NOT EXISTS paroisses (id INTEGER PRIMARY KEY, nom TEXT, commune TEXT, ville TEXT, responsable TEXT, bureau TEXT, diocese_id INTEGER)''')
 c.execute('''CREATE TABLE IF NOT EXISTS equipes (id INTEGER PRIMARY KEY, nom_equipe TEXT, responsable TEXT, bureau TEXT, paroisse_id INTEGER, max_membres INTEGER DEFAULT 10)''')
@@ -296,7 +251,7 @@ c.execute('''CREATE TABLE IF NOT EXISTS abonnements (id INTEGER PRIMARY KEY, mem
 c.execute('''CREATE TABLE IF NOT EXISTS archives (id INTEGER PRIMARY KEY, membre_id INTEGER, situation TEXT, date_debut DATE, date_fin DATE, commentaire TEXT, auteur_id INTEGER, auteur_nom TEXT, auteur_role TEXT, paroisse_id INTEGER, equipe_id INTEGER)''')
 conn.commit()
 
-# --- Migrations : ajout des colonnes manquantes ---
+# --- Migrations : ajout des colonnes manquantes (sécurisé) ---
 try:
     c.execute("ALTER TABLE membres ADD COLUMN statut TEXT DEFAULT 'actif'")
     conn.commit()
@@ -416,7 +371,8 @@ if st.session_state['role'] == 'diocese':
                 bureau = st.text_area("Bureau")
             if st.form_submit_button("🏘️ Créer paroisses"):
                 if nom and commune and ville and responsable:
-                    if paroisse_existe(nom, commune, ville):
+                    existe = c.execute("SELECT id FROM paroisses WHERE nom=? AND commune=? AND ville=? AND diocese_id=?", (nom, commune, ville, 1)).fetchone()
+                    if existe:
                         st.error("❌ Cette paroisse existe déjà !")
                     else:
                         c.execute("INSERT INTO paroisses (nom, commune, ville, responsable, bureau, diocese_id) VALUES (?,?,?,?,?,?)", (nom, commune, ville, responsable, bureau, 1))
@@ -499,11 +455,7 @@ if st.session_state['role'] == 'diocese':
         annee_debut = st.number_input("Année de début de la période", min_value=2020, max_value=date.today().year+1, value=date.today().year, step=1)
         st.write(f"**Période :** {periode_affichage(annee_debut)}")
         total_membres = c.execute("SELECT COUNT(*) FROM membres WHERE statut='actif'").fetchone()[0]
-        colonne = get_colonne_annee()
-        if colonne == 'annee_debut':
-            payes = c.execute("SELECT COUNT(*) FROM abonnements WHERE annee_debut=? AND statut='paye'", (annee_debut,)).fetchone()[0]
-        else:
-            payes = c.execute("SELECT COUNT(*) FROM abonnements WHERE annee=? AND statut='paye'", (annee_debut,)).fetchone()[0]
+        payes = c.execute("SELECT COUNT(*) FROM abonnements WHERE annee_debut=? AND statut='paye'", (annee_debut,)).fetchone()[0]
         col1, col2 = st.columns(2)
         col1.metric("Total membres actifs", total_membres)
         col2.metric("Abonnements enregistrés", payes, delta=f"{payes/total_membres*100:.0f}%" if total_membres else "0%")
@@ -511,33 +463,19 @@ if st.session_state['role'] == 'diocese':
         paroisses = c.execute("SELECT id, nom FROM paroisses").fetchall()
         for p in paroisses:
             with st.expander(f"🏛️ {p[1]}"):
-                if colonne == 'annee_debut':
-                    stats = c.execute('''SELECT COUNT(m.id) as total, 
-                                                SUM(CASE WHEN a.annee_debut=? AND a.statut='paye' THEN 1 ELSE 0 END) as payes
-                                         FROM membres m
-                                         LEFT JOIN abonnements a ON m.id=a.membre_id AND a.annee_debut=?
-                                         WHERE m.paroisse_id=? AND m.statut='actif''', (annee_debut, annee_debut, p[0])).fetchone()
-                else:
-                    stats = c.execute('''SELECT COUNT(m.id) as total, 
-                                                SUM(CASE WHEN a.annee=? AND a.statut='paye' THEN 1 ELSE 0 END) as payes
-                                         FROM membres m
-                                         LEFT JOIN abonnements a ON m.id=a.membre_id AND a.annee=?
-                                         WHERE m.paroisse_id=? AND m.statut='actif''', (annee_debut, annee_debut, p[0])).fetchone()
+                stats = c.execute('''SELECT COUNT(m.id) as total, 
+                                            SUM(CASE WHEN a.annee_debut=? AND a.statut='paye' THEN 1 ELSE 0 END) as payes
+                                     FROM membres m
+                                     LEFT JOIN abonnements a ON m.id=a.membre_id AND a.annee_debut=?
+                                     WHERE m.paroisse_id=? AND m.statut='actif''', (annee_debut, annee_debut, p[0])).fetchone()
                 st.write(f"Total membres : {stats[0]} – À jour : {stats[1]}")
                 equipes = c.execute("SELECT id, nom_equipe FROM equipes WHERE paroisse_id=?", (p[0],)).fetchall()
                 for eq in equipes:
-                    if colonne == 'annee_debut':
-                        membres_eq = c.execute('''SELECT m.nom, m.prenom, m.matricule, a.type_abonnement
-                                                  FROM membres m
-                                                  LEFT JOIN abonnements a ON m.id=a.membre_id AND a.annee_debut=? AND a.statut='paye'
-                                                  WHERE m.equipe_id=? AND m.statut='actif'
-                                                  ORDER BY m.nom''', (annee_debut, eq[0])).fetchall()
-                    else:
-                        membres_eq = c.execute('''SELECT m.nom, m.prenom, m.matricule, a.type_abonnement
-                                                  FROM membres m
-                                                  LEFT JOIN abonnements a ON m.id=a.membre_id AND a.annee=? AND a.statut='paye'
-                                                  WHERE m.equipe_id=? AND m.statut='actif'
-                                                  ORDER BY m.nom''', (annee_debut, eq[0])).fetchall()
+                    membres_eq = c.execute('''SELECT m.nom, m.prenom, m.matricule, a.type_abonnement
+                                              FROM membres m
+                                              LEFT JOIN abonnements a ON m.id=a.membre_id AND a.annee_debut=? AND a.statut='paye'
+                                              WHERE m.equipe_id=? AND m.statut='actif'
+                                              ORDER BY m.nom''', (annee_debut, eq[0])).fetchall()
                     if membres_eq:
                         st.markdown(f"**👥 {eq[1]}**")
                         for m in membres_eq:
@@ -613,9 +551,6 @@ if st.session_state['role'] == 'diocese':
                 st.rerun()
 
 # ==================== PAROISSE ====================
-# (Le code pour Paroisse est très long, je le fournis dans la continuité, mais pour éviter de dépasser la limite, je le donne dans la réponse suivante. 
-# Cependant, je vais continuer ici pour rester complet.)
-
 elif st.session_state['role'] == 'paroisse':
     pid = st.session_state['paroisse_id']
     nom_paroisse = c.execute("SELECT nom FROM paroisses WHERE id=?", (pid,)).fetchone()[0]
@@ -651,6 +586,7 @@ elif st.session_state['role'] == 'paroisse':
                         st.error(f"❌ Une équipe nommée '{nom_eq}' existe déjà dans cette paroisse.")
                         erreur = True
                     if not erreur and responsable:
+                        # Vérifier que ce responsable n'est pas déjà responsable d'une autre équipe dans le même diocèse
                         resp_existant = c.execute('''
                             SELECT e.id FROM equipes e
                             JOIN paroisses p ON e.paroisse_id = p.id
@@ -708,7 +644,12 @@ elif st.session_state['role'] == 'paroisse':
                             date_adhesion = st.date_input("Date d'adhésion", min_value=date(1940,1,1), max_value=date.today(), value=date.today())
                         if st.form_submit_button("Ajouter"):
                             if nom and prenom:
-                                if membre_existe_deja(nom, prenom, naissance):
+                                # Vérifier doublon stricte dans tout le diocèse
+                                existant = c.execute('''
+                                    SELECT id FROM membres 
+                                    WHERE nom = ? AND prenom = ? AND date_naissance = ? AND statut = 'actif'
+                                ''', (nom, prenom, naissance)).fetchone()
+                                if existant:
                                     st.error("❌ Ce membre existe déjà dans le diocèse (même nom, prénom, date de naissance).")
                                 elif whatsapp:
                                     existant_whatsapp = c.execute("SELECT id FROM membres WHERE whatsapp = ? AND statut='actif'", (whatsapp,)).fetchone()
@@ -756,7 +697,12 @@ elif st.session_state['role'] == 'paroisse':
                         new_whatsapp = st.text_input("WhatsApp", value=membre[3])
                         new_photo = st.file_uploader("Nouvelle photo", type=['jpg','png','jpeg'])
                         if st.form_submit_button("Enregistrer"):
-                            if membre_existe_deja(new_nom, new_prenom, new_naissance, exclude_id=mid):
+                            # Vérifier doublon en excluant l'ID courant
+                            existant = c.execute('''
+                                SELECT id FROM membres 
+                                WHERE nom = ? AND prenom = ? AND date_naissance = ? AND id != ? AND statut='actif'
+                            ''', (new_nom, new_prenom, new_naissance, mid)).fetchone()
+                            if existant:
                                 st.error("❌ Ces informations correspondent déjà à un autre membre.")
                             elif new_whatsapp:
                                 existant_whatsapp = c.execute("SELECT id FROM membres WHERE whatsapp = ? AND id != ? AND statut='actif'", (new_whatsapp, mid)).fetchone()
@@ -938,8 +884,13 @@ elif st.session_state['role'] == 'equipe':
                         date_adhesion = st.date_input("Date d'adhésion", min_value=date(1940,1,1), max_value=date.today(), value=date.today())
                     if st.form_submit_button("Ajouter"):
                         if nom and prenom:
-                            if membre_existe_deja(nom, prenom, naissance):
-                                st.error("❌ Ce membre existe déjà dans le diocèse.")
+                            # Vérifier doublon dans tout le diocèse
+                            existant = c.execute('''
+                                SELECT id FROM membres 
+                                WHERE nom = ? AND prenom = ? AND date_naissance = ? AND statut = 'actif'
+                            ''', (nom, prenom, naissance)).fetchone()
+                            if existant:
+                                st.error("❌ Ce membre existe déjà dans le diocèse (même nom, prénom, date de naissance).")
                             elif whatsapp:
                                 existant_whatsapp = c.execute("SELECT id FROM membres WHERE whatsapp = ? AND statut='actif'", (whatsapp,)).fetchone()
                                 if existant_whatsapp:
@@ -987,7 +938,11 @@ elif st.session_state['role'] == 'equipe':
                     new_whatsapp = st.text_input("WhatsApp", value=membre[3])
                     new_photo = st.file_uploader("Nouvelle photo", type=['jpg','png','jpeg'])
                     if st.form_submit_button("Enregistrer"):
-                        if membre_existe_deja(new_nom, new_prenom, new_naissance, exclude_id=mid):
+                        existant = c.execute('''
+                            SELECT id FROM membres 
+                            WHERE nom = ? AND prenom = ? AND date_naissance = ? AND id != ? AND statut='actif'
+                        ''', (new_nom, new_prenom, new_naissance, mid)).fetchone()
+                        if existant:
                             st.error("❌ Ces informations correspondent déjà à un autre membre.")
                         elif new_whatsapp:
                             existant_whatsapp = c.execute("SELECT id FROM membres WHERE whatsapp = ? AND id != ? AND statut='actif'", (new_whatsapp, mid)).fetchone()

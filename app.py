@@ -464,10 +464,17 @@ if st.session_state['role'] == 'diocese':
         paroisses = c.execute("SELECT id, nom FROM paroisses").fetchall()
         for p in paroisses:
             with st.expander(f"🏛️ {p[1]}"):
-                stats = c.execute('''SELECT COUNT(m.id) as total, 
-                                            SUM(CASE WHEN a.annee_debut=? AND a.statut='paye' THEN 1 ELSE 0 END) as payes
+                # Vérifier quelle colonne existe
+                colonne_annee = 'annee_debut'
+                try:
+                    c.execute("SELECT annee_debut FROM abonnements LIMIT 1")
+                except sqlite3.OperationalError:
+                    colonne_annee = 'annee'
+                
+                stats = c.execute(f'''SELECT COUNT(m.id) as total, 
+                                            SUM(CASE WHEN a.{colonne_annee}=? AND a.statut='paye' THEN 1 ELSE 0 END) as payes
                                      FROM membres m
-                                     LEFT JOIN abonnements a ON m.id=a.membre_id AND a.annee_debut=?
+                                     LEFT JOIN abonnements a ON m.id=a.membre_id AND a.{colonne_annee}=?
                                      WHERE m.paroisse_id=? AND m.statut='actif''', (annee_debut, annee_debut, p[0])).fetchone()
                 st.write(f"Total membres : {stats[0]} – À jour : {stats[1]}")
                 equipes = c.execute("SELECT id, nom_equipe FROM equipes WHERE paroisse_id=?", (p[0],)).fetchall()

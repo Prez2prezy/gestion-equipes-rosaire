@@ -89,6 +89,65 @@ def sauvegarder_photo(photo_fichier, matricule):
         return chemin
     return None
 
+def equipe_existe(paroisse_id, nom_equipe, exclude_id=None):
+    if exclude_id:
+        query = "SELECT id FROM equipes WHERE paroisse_id=? AND nom_equipe=? AND id != ?"
+        params = (paroisse_id, nom_equipe, exclude_id)
+    else:
+        query = "SELECT id FROM equipes WHERE paroisse_id=? AND nom_equipe=?"
+        params = (paroisse_id, nom_equipe)
+    return c.execute(query, params).fetchone() is not None
+
+def paroisse_existe(nom, commune, ville, exclude_id=None):
+    if exclude_id:
+        query = "SELECT id FROM paroisses WHERE nom=? AND commune=? AND ville=? AND id != ?"
+        params = (nom, commune, ville, exclude_id)
+    else:
+        query = "SELECT id FROM paroisses WHERE nom=? AND commune=? AND ville=?"
+        params = (nom, commune, ville)
+    return c.execute(query, params).fetchone() is not None
+
+def membre_existe_deja(nom, prenom, date_naissance, exclude_id=None):
+    if exclude_id:
+        query = "SELECT id FROM membres WHERE nom=? AND prenom=? AND date_naissance=? AND id != ?"
+        params = (nom, prenom, date_naissance, exclude_id)
+    else:
+        query = "SELECT id FROM membres WHERE nom=? AND prenom=? AND date_naissance=?"
+        params = (nom, prenom, date_naissance)
+    return c.execute(query, params).fetchone() is not None
+
+def enregistrer_abonnement(membre_id, annee_debut, montant=0, type_abonnement='abonnement'):
+    date_paiement = date.today()
+    # Pour compatibilité ancienne base, on essaie d'abord 'annee_debut', sinon 'annee'
+    colonne_annee = 'annee_debut'
+    try:
+        c.execute("SELECT annee_debut FROM abonnements LIMIT 1")
+    except sqlite3.OperationalError:
+        colonne_annee = 'annee'
+    
+    if colonne_annee == 'annee_debut':
+        existant = c.execute("SELECT id FROM abonnements WHERE membre_id=? AND annee_debut=?", (membre_id, annee_debut)).fetchone()
+    else:
+        existant = c.execute("SELECT id FROM abonnements WHERE membre_id=? AND annee=?", (membre_id, annee_debut)).fetchone()
+    
+    if existant:
+        if colonne_annee == 'annee_debut':
+            c.execute("UPDATE abonnements SET date_paiement=?, montant=?, type_abonnement=?, statut='paye' WHERE id=?",
+                      (date_paiement, montant, type_abonnement, existant[0]))
+        else:
+            c.execute("UPDATE abonnements SET date_paiement=?, montant=?, type_abonnement=?, statut='paye' WHERE id=?",
+                      (date_paiement, montant, type_abonnement, existant[0]))
+    else:
+        if colonne_annee == 'annee_debut':
+            c.execute('''INSERT INTO abonnements (membre_id, annee_debut, date_paiement, montant, type_abonnement, statut)
+                         VALUES (?, ?, ?, ?, ?, ?)''',
+                      (membre_id, annee_debut, date_paiement, montant, type_abonnement, 'paye'))
+        else:
+            c.execute('''INSERT INTO abonnements (membre_id, annee, date_paiement, montant, type_abonnement, statut)
+                         VALUES (?, ?, ?, ?, ?, ?)''',
+                      (membre_id, annee_debut, date_paiement, montant, type_abonnement, 'paye'))
+    conn.commit()
+
 def supprimer_photo(photo_path):
     if photo_path and os.path.exists(photo_path):
         os.remove(photo_path)

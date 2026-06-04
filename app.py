@@ -166,9 +166,16 @@ def enregistrer_abonnement(membre_id, annee_debut, montant=0, type_abonnement='a
     conn.commit()
 
 def verifier_abonnement(membre_id, annee_debut):
-    result = c.execute('''SELECT id FROM abonnements 
-                          WHERE membre_id = ? AND annee_debut = ? AND statut = 'paye' ''',
-                       (membre_id, annee_debut)).fetchone()
+    colonne_annee = 'annee_debut'
+    try:
+        c.execute("SELECT annee_debut FROM abonnements LIMIT 1")
+    except sqlite3.OperationalError:
+        colonne_annee = 'annee'
+    
+    if colonne_annee == 'annee_debut':
+        result = c.execute("SELECT id FROM abonnements WHERE membre_id=? AND annee_debut=? AND statut='paye'", (membre_id, annee_debut)).fetchone()
+    else:
+        result = c.execute("SELECT id FROM abonnements WHERE membre_id=? AND annee=? AND statut='paye'", (membre_id, annee_debut)).fetchone()
     return result is not None
 
 def periode_affichage(annee_debut):

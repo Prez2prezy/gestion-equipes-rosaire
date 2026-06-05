@@ -763,7 +763,7 @@ if st.session_state['role'] == 'diocese':
                                                     df.to_excel(writer, sheet_name=f"Abonnes_{eq_nom}", index=False)
                                                 output.seek(0)
                                                 st.download_button(f"📥 Exporter les abonnés de {eq_nom}", data=output,
-                                                                file_name=f"abonnes_{eq_nom}_{annee_debut}.xlsx",
+                                                                file_name=f"abonnes_{eq_nom}_{annee_debut} - {annee_debut+1}.xlsx",
                                                                 key=f"export_abos_eq_{eid}_{annee_debut}")
                                             except Exception as e:
                                                 st.error(f"Erreur export: {e}")
@@ -859,7 +859,7 @@ if st.session_state['role'] == 'diocese':
                                         df.to_excel(writer, sheet_name=f"Abonnes_{nom_paroisse}", index=False)
                                     output.seek(0)
                                     st.download_button(f"📥 Exporter les abonnés de {nom_paroisse}", data=output,
-                                                    file_name=f"abonnes_{nom_paroisse}_{annee_debut}.xlsx",
+                                                    file_name=f"abonnes_{nom_paroisse}_{annee_debut} - {annee_debut+1}.xlsx",
                                                     key=f"export_abos_par_{pid}_{annee_debut}")
                                 except Exception as e:
                                     st.error(f"Erreur export: {e}")
@@ -1538,7 +1538,7 @@ elif st.session_state['role'] == 'paroisse':
                                     pd.DataFrame(data).to_excel(writer, sheet_name=f"Abonnes_{nom_eq}", index=False)
                                 output.seek(0)
                                 st.download_button(f"📥 Exporter les abonnés", data=output,
-                                                file_name=f"abonnes_{nom_eq}_{nom_paroisse}_{annee_debut}.xlsx",
+                                                file_name=f"abonnes_{nom_eq}_{nom_paroisse}_{annee_debut} - {annee_debut+1}.xlsx",
                                                 key=f"export_abos_par_eq_{eid_eq}_{annee_debut}")
                             except Exception as e:
                                 st.error(f"Erreur export: {e}")
@@ -1556,7 +1556,7 @@ elif st.session_state['role'] == 'paroisse':
                                     pd.DataFrame(data).to_excel(writer, sheet_name=f"Reabonnes_{nom_eq}", index=False)
                                 output.seek(0)
                                 st.download_button(f"📥 Exporter les réabonnés", data=output,
-                                                file_name=f"reabonnes_{nom_eq}_{nom_paroisse}_{annee_debut}.xlsx",
+                                                file_name=f"reabonnes_{nom_eq}_{nom_paroisse}_{annee_debut} - {annee_debut+1}.xlsx",
                                                 key=f"export_reabos_par_eq_{eid_eq}_{annee_debut}")
                             except Exception as e:
                                 st.error(f"Erreur export: {e}")

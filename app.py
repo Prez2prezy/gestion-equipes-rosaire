@@ -251,27 +251,42 @@ c.execute('''CREATE TABLE IF NOT EXISTS abonnements (id INTEGER PRIMARY KEY, mem
 c.execute('''CREATE TABLE IF NOT EXISTS archives (id INTEGER PRIMARY KEY, membre_id INTEGER, situation TEXT, date_debut DATE, date_fin DATE, commentaire TEXT, auteur_id INTEGER, auteur_nom TEXT, auteur_role TEXT, paroisse_id INTEGER, equipe_id INTEGER)''')
 conn.commit()
 
-# --- Migrations : ajout des colonnes manquantes (sécurisé) ---
-try:
+# Migrations (ajout de colonnes si absentes)
+try: 
     c.execute("ALTER TABLE membres ADD COLUMN statut TEXT DEFAULT 'actif'")
     conn.commit()
-except: pass
-try:
+except: 
+    pass
+
+try: 
+    c.execute("ALTER TABLE membres ADD COLUMN numero_meditation TEXT")
+    conn.commit()
+except: 
+    pass
+
+try: 
     c.execute("ALTER TABLE abonnements ADD COLUMN annee_debut INTEGER")
     conn.commit()
-except: pass
-try:
+except: 
+    pass
+
+try: 
     c.execute("ALTER TABLE archives ADD COLUMN situation TEXT")
     conn.commit()
-except: pass
-try:
+except: 
+    pass
+
+try: 
     c.execute("ALTER TABLE archives ADD COLUMN date_debut DATE")
     conn.commit()
-except: pass
-try:
+except: 
+    pass
+
+try: 
     c.execute("ALTER TABLE archives ADD COLUMN date_fin DATE")
     conn.commit()
-except: pass
+except: 
+    pass
 
 # --- Initialisation ---
 c.execute("SELECT COUNT(*) FROM diocese")

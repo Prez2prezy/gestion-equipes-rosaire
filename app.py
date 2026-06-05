@@ -112,7 +112,7 @@ def verifier_abonnement(membre_id, annee_debut):
     return result is not None
 
 def periode_affichage(annee_debut):
-    return f"Oct {annee_debut} – Oct {annee_debut+1}"
+    return f"Sept {annee_debut} – Sept {annee_debut+1}"
 
 def afficher_situation(situation):
     mapping = {
@@ -226,7 +226,7 @@ def exporter_excel_diocese():
                                    ORDER BY a.annee_debut DESC, m.nom''').fetchall()
         if abonnements:
             df = pd.DataFrame(abonnements, columns=["ID", "Matricule", "Nom", "Prénom", "Année début", "Date paiement", "Montant", "Type"])
-            df["Période"] = df["Année début"].apply(lambda x: f"Oct {x} – Oct {x+1}")
+            df["Période"] = df["Année début"].apply(lambda x: f"Sept {x} – Sept {x+1}")
             df.to_excel(writer, sheet_name="Abonnements", index=False)
         archives = c.execute('''SELECT m.matricule, m.nom, m.prenom, a.situation, a.date_debut, a.date_fin, a.commentaire,
                                        p.nom as paroisse, e.nom_equipe as equipe
@@ -339,8 +339,9 @@ st.markdown("---")
 
 # ==================== DIOCÈSE ====================
 if st.session_state['role'] == 'diocese':
-    menu = st.sidebar.radio("Navigation", ["Voir diocèse", "Créer paroisses", "Gérer paroisses", "Rechercher par matricule", "Gérer les accès", "Statistiques", "📅 Abonnements", "💬 WhatsApp", "📊 Export Excel", "📦 Archives", "🗑️ Réinitialiser tout"])
-    
+    # Après (supprimer "📊 Export Excel")
+    menu = st.sidebar.radio("Navigation", ["Voir diocèse", "Créer paroisses", "Gérer paroisses", "Rechercher par matricule", "Gérer les accès", "Statistiques", "📅 Abonnements", "💬 WhatsApp", "📦 Archives", "🗑️ Réinitialiser tout"])
+
     # Voir diocèse
     if menu == "Voir diocèse":
         st.markdown('<h2 style="color:#1A237E;">🏛️ DIOCÈSE DE GRAND-BASSAM</h2>', unsafe_allow_html=True)
@@ -389,17 +390,166 @@ if st.session_state['role'] == 'diocese':
     # Gérer paroisses
     elif menu == "Gérer paroisses":
         st.markdown('<h2 style="color:#1A237E;">📋 Consultation des paroisses</h2>', unsafe_allow_html=True)
-        paroisses = c.execute("SELECT id, nom, commune, ville, responsable, bureau FROM paroisses").fetchall()
+        
+        # Initialisation des états de session pour les dialogues
+        if 'show_equipes' not in st.session_state:
+            st.session_state['show_equipes'] = None
+        if 'show_equipiers' not in st.session_state:
+            st.session_state['show_equipiers'] = None
+        if 'show_membres_equipe' not in st.session_state:
+            st.session_state['show_membres_equipe'] = None
+        
+        paroisses = c.execute("SELECT id, nom, commune, ville, responsable, bureau FROM paroisses ORDER BY nom").fetchall()
+        
         for p in paroisses:
-            nb_equipes = c.execute("SELECT COUNT(*) FROM equipes WHERE paroisse_id=?", (p[0],)).fetchone()[0]
-            with st.expander(f"🏛️ {p[1]} ({p[2]} / {p[3]}) - {nb_equipes} équipe(s)"):
-                st.write(f"**Responsable :** {p[4]}")
-                st.write(f"**Bureau :** {p[5]}")
-                equipes = c.execute("SELECT nom_equipe, responsable FROM equipes WHERE paroisse_id=?", (p[0],)).fetchall()
-                if equipes:
-                    for eq in equipes:
-                        st.write(f"- {eq[0]} (Resp: {eq[1]})")
-    
+            pid, nom, commune, ville, responsable, bureau = p
+            nb_equipes = c.execute("SELECT COUNT(*) FROM equipes WHERE paroisse_id=?", (pid,)).fetchone()[0]
+            nb_membres = c.execute("SELECT COUNT(*) FROM membres WHERE paroisse_id=? AND statut='actif'", (pid,)).fetchone()[0]
+            
+            with st.expander(f"🏛️ {nom} ({commune} / {ville}) - {nb_equipes} équipe(s) - {nb_membres} membre(s)"):
+                st.write(f"**Responsable :** {responsable}")
+                st.write(f"**Bureau :** {bureau}")
+                
+                # Boutons Équipes et Équipiers
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button(f"👥 Voir les équipes", key=f"btn_equipes_{pid}"):
+                        if st.session_state['show_equipes'] == pid:
+                            st.session_state['show_equipes'] = None
+                        else:
+                            st.session_state['show_equipes'] = pid
+                            st.session_state['show_equipiers'] = None
+                            st.session_state['show_membres_equipe'] = None
+                        st.rerun()
+                with col2:
+                    if st.button(f"👤 Voir tous les équipiers", key=f"btn_equipiers_{pid}"):
+                        if st.session_state['show_equipiers'] == pid:
+                            st.session_state['show_equipiers'] = None
+                        else:
+                            st.session_state['show_equipiers'] = pid
+                            st.session_state['show_equipes'] = None
+                            st.session_state['show_membres_equipe'] = None
+                        st.rerun()
+                
+                # --- Affichage des équipes ---
+                if st.session_state.get('show_equipes') == pid:
+                    st.markdown("---")
+                    st.markdown(f"#### 👥 Équipes de {nom}")
+                    equipes = c.execute("SELECT id, nom_equipe, responsable, bureau FROM equipes WHERE paroisse_id=? ORDER BY nom_equipe", (pid,)).fetchall()
+                    
+                    if not equipes:
+                        st.info("Aucune équipe dans cette paroisse")
+                    else:
+                        for eq in equipes:
+                            eq_id, eq_nom, eq_resp, eq_bureau = eq
+                            nb_membres_eq = c.execute("SELECT COUNT(*) FROM membres WHERE equipe_id=? AND statut='actif'", (eq_id,)).fetchone()[0]
+                            
+                            with st.expander(f"📌 {eq_nom} - Respo: {eq_resp} ({nb_membres_eq} membres)"):
+                                st.write(f"**Bureau :** {eq_bureau}")
+                                
+                                # Bouton pour voir les membres de l'équipe
+                                if st.button(f"📋 Voir les membres de {eq_nom}", key=f"btn_membres_eq_{eq_id}"):
+                                    if st.session_state['show_membres_equipe'] == eq_id:
+                                        st.session_state['show_membres_equipe'] = None
+                                    else:
+                                        st.session_state['show_membres_equipe'] = eq_id
+                                    st.rerun()
+                                
+                                # Affichage des membres de l'équipe
+                                if st.session_state.get('show_membres_equipe') == eq_id:
+                                    membres_eq = c.execute("""
+                                        SELECT matricule, nom, prenom, whatsapp, numero_meditation, date_adhesion, photo_path
+                                        FROM membres 
+                                        WHERE equipe_id=? AND statut='actif' 
+                                        ORDER BY nom
+                                    """, (eq_id,)).fetchall()
+                                    
+                                    if not membres_eq:
+                                        st.info("Aucun membre dans cette équipe")
+                                    else:
+                                        # Tableau des membres
+                                        data = []
+                                        for m in membres_eq:
+                                            data.append({
+                                                "Matricule": m[0],
+                                                "Nom": m[1],
+                                                "Prénom": m[2],
+                                                "WhatsApp": m[3],
+                                                "N° méditation": m[4] or "-",
+                                                "Date d'adhésion": m[5]
+                                            })
+                                        df = pd.DataFrame(data)
+                                        st.dataframe(df, use_container_width=True)
+                                        
+                                        # Export Excel des membres de l'équipe
+                                        output = io.BytesIO()
+                                        try:
+                                            with pd.ExcelWriter(output, engine=None) as writer:
+                                                df.to_excel(writer, sheet_name=f"Membres_{eq_nom}", index=False)
+                                            output.seek(0)
+                                            st.download_button(
+                                                f"📥 Exporter les membres de {eq_nom}",
+                                                data=output,
+                                                file_name=f"membres_{eq_nom}_{date.today()}.xlsx",
+                                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                                key=f"export_membres_eq_{eq_id}_{date.today()}"
+                                            )
+                                        except Exception as e:
+                                            st.error(f"Erreur export: {e}")
+                
+                # --- Affichage de tous les équipiers de la paroisse ---
+                if st.session_state.get('show_equipiers') == pid:
+                    st.markdown("---")
+                    st.markdown(f"#### 👤 Tous les équipiers de {nom}")
+                    
+                    # Récupérer tous les membres actifs de la paroisse avec leur équipe
+                    membres_paroisse = c.execute("""
+                        SELECT m.matricule, m.nom, m.prenom, m.whatsapp, m.numero_meditation, m.date_adhesion, 
+                            e.nom_equipe, m.photo_path
+                        FROM membres m
+                        JOIN equipes e ON m.equipe_id = e.id
+                        WHERE m.paroisse_id=? AND m.statut='actif'
+                        ORDER BY e.nom_equipe, m.nom
+                    """, (pid,)).fetchall()
+                    
+                    if not membres_paroisse:
+                        st.info("Aucun membre actif dans cette paroisse")
+                    else:
+                        # Statistiques
+                        total_membres = len(membres_paroisse)
+                        st.info(f"📊 Total : {total_membres} membre(s) actif(s)")
+                        
+                        # Tableau des membres
+                        data = []
+                        for m in membres_paroisse:
+                            data.append({
+                                "Matricule": m[0],
+                                "Nom": m[1],
+                                "Prénom": m[2],
+                                "WhatsApp": m[3],
+                                "N° méditation": m[4] or "-",
+                                "Date d'adhésion": m[5],
+                                "Équipe": m[6]
+                            })
+                        df = pd.DataFrame(data)
+                        st.dataframe(df, use_container_width=True)
+                        
+                        # Export Excel de tous les membres
+                        output = io.BytesIO()
+                        try:
+                            with pd.ExcelWriter(output, engine=None) as writer:
+                                df.to_excel(writer, sheet_name=f"Equipiers_{nom}", index=False)
+                            output.seek(0)
+                            st.download_button(
+                                f"📥 Exporter tous les équipiers de {nom}",
+                                data=output,
+                                file_name=f"equipiers_{nom}_{date.today()}.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                key=f"export_equipiers_{pid}_{date.today()}"
+                            )
+                        except Exception as e:
+                            st.error(f"Erreur export: {e}")    
+
     # Rechercher par matricule
     elif menu == "Rechercher par matricule":
         st.markdown('<h2 style="color:#1A237E;">🔍 Recherche par matricule</h2>', unsafe_allow_html=True)
@@ -449,39 +599,291 @@ if st.session_state['role'] == 'diocese':
         col2.metric("👥 Équipes", nb_e)
         col3.metric("👤 Membres actifs", nb_m)
     
-    # Abonnements (consultation)
+    # Abonnements (Diocèse) avec hiérarchisation
     elif menu == "📅 Abonnements":
         st.markdown('<h2 style="color:#1A237E;">📅 Suivi des abonnements (Diocèse)</h2>', unsafe_allow_html=True)
-        annee_debut = st.number_input("Année de début de la période", min_value=2020, max_value=date.today().year+1, value=date.today().year, step=1)
-        st.write(f"**Période :** {periode_affichage(annee_debut)}")
+        
+        # Initialisation des états de session
+        if 'show_paroisse_abos' not in st.session_state:
+            st.session_state['show_paroisse_abos'] = None
+        if 'show_equipe_abos' not in st.session_state:
+            st.session_state['show_equipe_abos'] = None
+        if 'abos_view_type' not in st.session_state:
+            st.session_state['abos_view_type'] = None  # 'equipes' ou 'membres'
+        
+        annee_debut = st.number_input("Année de début de la période", min_value=2020, max_value=date.today().year, value=date.today().year-1, step=1)
+        periode_aff = f"Sept {annee_debut} – Sept {annee_debut+1}"
+        st.write(f"**Période :** {periode_aff}")
+        
+        # Statistiques générales
         total_membres = c.execute("SELECT COUNT(*) FROM membres WHERE statut='actif'").fetchone()[0]
         payes = c.execute("SELECT COUNT(*) FROM abonnements WHERE annee_debut=? AND statut='paye'", (annee_debut,)).fetchone()[0]
         col1, col2 = st.columns(2)
-        col1.metric("Total membres actifs", total_membres)
-        col2.metric("Abonnements enregistrés", payes, delta=f"{payes/total_membres*100:.0f}%" if total_membres else "0%")
+        col1.metric("📊 Total membres actifs", total_membres)
+        col2.metric("✅ Abonnements enregistrés", payes, delta=f"{payes/total_membres*100:.0f}%" if total_membres else "0%")
+        
         st.markdown("---")
-        paroisses = c.execute("SELECT id, nom FROM paroisses").fetchall()
+        st.markdown("### 🏛️ Paroisses")
+        
+        paroisses = c.execute("SELECT id, nom FROM paroisses ORDER BY nom").fetchall()
+        
         for p in paroisses:
-            with st.expander(f"🏛️ {p[1]}"):
-                stats = c.execute('''SELECT COUNT(m.id) as total, 
-                                            SUM(CASE WHEN a.annee_debut=? AND a.statut='paye' THEN 1 ELSE 0 END) as payes
-                                     FROM membres m
-                                     LEFT JOIN abonnements a ON m.id=a.membre_id AND a.annee_debut=?
-                                     WHERE m.paroisse_id=? AND m.statut='actif''', (annee_debut, annee_debut, p[0])).fetchone()
-                st.write(f"Total membres : {stats[0]} – À jour : {stats[1]}")
-                equipes = c.execute("SELECT id, nom_equipe FROM equipes WHERE paroisse_id=?", (p[0],)).fetchall()
-                for eq in equipes:
-                    membres_eq = c.execute('''SELECT m.nom, m.prenom, m.matricule, a.type_abonnement
-                                              FROM membres m
-                                              LEFT JOIN abonnements a ON m.id=a.membre_id AND a.annee_debut=? AND a.statut='paye'
-                                              WHERE m.equipe_id=? AND m.statut='actif'
-                                              ORDER BY m.nom''', (annee_debut, eq[0])).fetchall()
-                    if membres_eq:
-                        st.markdown(f"**👥 {eq[1]}**")
-                        for m in membres_eq:
-                            statut = m[3] if m[3] else "Non enregistré"
-                            st.write(f"- {m[0]} {m[1]} ({m[2]}) – {statut}")
-    
+            pid, nom_paroisse = p
+            
+            # Statistiques de la paroisse
+            stats = c.execute("""
+                SELECT COUNT(m.id) as total, 
+                    SUM(CASE WHEN a.annee_debut=? AND a.statut='paye' THEN 1 ELSE 0 END) as payes
+                FROM membres m
+                LEFT JOIN abonnements a ON m.id=a.membre_id AND a.annee_debut=?
+                WHERE m.paroisse_id=? AND m.statut='actif'
+            """, (annee_debut, annee_debut, pid)).fetchone()
+            
+            total_par = stats[0] or 0
+            payes_par = stats[1] or 0
+            pourcent = f"{(payes_par/total_par*100):.0f}%" if total_par > 0 else "0%"
+            
+            with st.expander(f"🏛️ {nom_paroisse} - {total_par} membre(s) - {payes_par} à jour ({pourcent})"):
+                # Boutons Voir les équipes et Voir tous les équipiers
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button(f"👥 Voir les équipes", key=f"abos_btn_equipes_{pid}"):
+                        if st.session_state['show_paroisse_abos'] == pid and st.session_state['abos_view_type'] == 'equipes':
+                            st.session_state['show_paroisse_abos'] = None
+                            st.session_state['abos_view_type'] = None
+                        else:
+                            st.session_state['show_paroisse_abos'] = pid
+                            st.session_state['abos_view_type'] = 'equipes'
+                            st.session_state['show_equipe_abos'] = None
+                        st.rerun()
+                with col2:
+                    if st.button(f"👤 Voir tous les équipiers", key=f"abos_btn_membres_{pid}"):
+                        if st.session_state['show_paroisse_abos'] == pid and st.session_state['abos_view_type'] == 'membres':
+                            st.session_state['show_paroisse_abos'] = None
+                            st.session_state['abos_view_type'] = None
+                        else:
+                            st.session_state['show_paroisse_abos'] = pid
+                            st.session_state['abos_view_type'] = 'membres'
+                            st.session_state['show_equipe_abos'] = None
+                        st.rerun()
+                
+                # --- Vue par équipes ---
+                if st.session_state.get('show_paroisse_abos') == pid and st.session_state.get('abos_view_type') == 'equipes':
+                    st.markdown("---")
+                    st.markdown(f"#### 👥 Équipes de {nom_paroisse}")
+                    
+                    equipes = c.execute("SELECT id, nom_equipe FROM equipes WHERE paroisse_id=? ORDER BY nom_equipe", (pid,)).fetchall()
+                    
+                    if not equipes:
+                        st.info("Aucune équipe dans cette paroisse")
+                    else:
+                        for eq in equipes:
+                            eid, eq_nom = eq
+                            
+                            # Statistiques de l'équipe
+                            stats_eq = c.execute("""
+                                SELECT COUNT(m.id) as total,
+                                    SUM(CASE WHEN a.annee_debut=? AND a.statut='paye' THEN 1 ELSE 0 END) as payes
+                                FROM membres m
+                                LEFT JOIN abonnements a ON m.id=a.membre_id AND a.annee_debut=?
+                                WHERE m.equipe_id=? AND m.statut='actif'
+                            """, (annee_debut, annee_debut, eid)).fetchone()
+                            
+                            total_eq = stats_eq[0] or 0
+                            payes_eq = stats_eq[1] or 0
+                            pourcent_eq = f"{(payes_eq/total_eq*100):.0f}%" if total_eq > 0 else "0%"
+                            
+                            with st.expander(f"📌 {eq_nom} - {total_eq} membre(s) - {payes_eq} à jour ({pourcent_eq})"):
+                                if st.button(f"📋 Voir les détails", key=f"abos_voir_eq_{eid}"):
+                                    if st.session_state['show_equipe_abos'] == eid:
+                                        st.session_state['show_equipe_abos'] = None
+                                    else:
+                                        st.session_state['show_equipe_abos'] = eid
+                                    st.rerun()
+                                
+                                # Affichage des listes pour l'équipe
+                                if st.session_state.get('show_equipe_abos') == eid:
+                                    # Récupérer les données de l'équipe
+                                    membres_eq = c.execute("""
+                                        SELECT m.id, m.nom, m.prenom, m.matricule, 
+                                            a.type_abonnement, a.date_paiement, a.montant
+                                        FROM membres m
+                                        LEFT JOIN abonnements a ON m.id=a.membre_id AND a.annee_debut=? AND a.statut='paye'
+                                        WHERE m.equipe_id=? AND m.statut='actif'
+                                        ORDER BY m.nom
+                                    """, (annee_debut, eid)).fetchall()
+                                    
+                                    # Séparer les listes
+                                    abonnes = []
+                                    reabonnes = []
+                                    non_inscrits = []
+                                    
+                                    for m in membres_eq:
+                                        if m[4] == 'abonnement':
+                                            abonnes.append(m)
+                                        elif m[4] == 'reabonnement':
+                                            reabonnes.append(m)
+                                        else:
+                                            non_inscrits.append(m)
+                                    
+                                    # Affichage des onglets
+                                    tab1, tab2, tab3 = st.tabs(["📝 Abonnés", "🔄 Réabonnés", "❌ Non enregistrés"])
+                                    
+                                    with tab1:
+                                        st.write(f"**Période :** {periode_aff}")
+                                        if abonnes:
+                                            data = []
+                                            for a in abonnes:
+                                                data.append({
+                                                    "Nom": a[1], "Prénom": a[2], "Matricule": a[3],
+                                                    "Date paiement": a[5], "Montant": f"{a[6]} FCFA"
+                                                })
+                                            df = pd.DataFrame(data)
+                                            st.dataframe(df, use_container_width=True)
+                                            
+                                            # Export Excel
+                                            output = io.BytesIO()
+                                            try:
+                                                with pd.ExcelWriter(output, engine=None) as writer:
+                                                    df.to_excel(writer, sheet_name=f"Abonnes_{eq_nom}", index=False)
+                                                output.seek(0)
+                                                st.download_button(f"📥 Exporter les abonnés de {eq_nom}", data=output,
+                                                                file_name=f"abonnes_{eq_nom}_{annee_debut}.xlsx",
+                                                                key=f"export_abos_eq_{eid}_{annee_debut}")
+                                            except Exception as e:
+                                                st.error(f"Erreur export: {e}")
+                                        else:
+                                            st.info("Aucun abonnement enregistré")
+                                    
+                                    with tab2:
+                                        st.write(f"**Période :** {periode_aff}")
+                                        if reabonnes:
+                                            data = []
+                                            for r in reabonnes:
+                                                data.append({
+                                                    "Nom": r[1], "Prénom": r[2], "Matricule": r[3],
+                                                    "Date paiement": r[5], "Montant": f"{r[6]} FCFA"
+                                                })
+                                            df = pd.DataFrame(data)
+                                            st.dataframe(df, use_container_width=True)
+                                            
+                                            output = io.BytesIO()
+                                            try:
+                                                with pd.ExcelWriter(output, engine=None) as writer:
+                                                    df.to_excel(writer, sheet_name=f"Reabonnes_{eq_nom}", index=False)
+                                                output.seek(0)
+                                                st.download_button(f"📥 Exporter les réabonnés de {eq_nom}", data=output,
+                                                                file_name=f"reabonnes_{eq_nom}_{annee_debut}.xlsx",
+                                                                key=f"export_reabos_eq_{eid}_{annee_debut}")
+                                            except Exception as e:
+                                                st.error(f"Erreur export: {e}")
+                                        else:
+                                            st.info("Aucun réabonnement enregistré")
+                                    
+                                    with tab3:
+                                        if non_inscrits:
+                                            for n in non_inscrits:
+                                                st.write(f"- {n[1]} {n[2]} ({n[3]})")
+                                        else:
+                                            st.success("✓ Tous les membres sont à jour")
+                
+                # --- Vue par tous les équipiers de la paroisse ---
+                if st.session_state.get('show_paroisse_abos') == pid and st.session_state.get('abos_view_type') == 'membres':
+                    st.markdown("---")
+                    st.markdown(f"#### 👤 Tous les équipiers de {nom_paroisse}")
+                    
+                    # Récupérer tous les membres de la paroisse
+                    membres_paroisse = c.execute("""
+                        SELECT m.id, m.nom, m.prenom, m.matricule, m.whatsapp,
+                            e.nom_equipe, a.type_abonnement, a.date_paiement, a.montant
+                        FROM membres m
+                        JOIN equipes e ON m.equipe_id = e.id
+                        LEFT JOIN abonnements a ON m.id=a.membre_id AND a.annee_debut=? AND a.statut='paye'
+                        WHERE m.paroisse_id=? AND m.statut='actif'
+                        ORDER BY e.nom_equipe, m.nom
+                    """, (annee_debut, pid)).fetchall()
+                    
+                    if not membres_paroisse:
+                        st.info("Aucun membre actif dans cette paroisse")
+                    else:
+                        # Séparer les listes
+                        abonnes_par = []
+                        reabonnes_par = []
+                        non_inscrits_par = []
+                        
+                        for m in membres_paroisse:
+                            if m[6] == 'abonnement':
+                                abonnes_par.append(m)
+                            elif m[6] == 'reabonnement':
+                                reabonnes_par.append(m)
+                            else:
+                                non_inscrits_par.append(m)
+                        
+                        # Statistiques
+                        st.info(f"📊 Total : {len(membres_paroisse)} membre(s) - ✅ {len(abonnes_par)} abonné(s) - 🔄 {len(reabonnes_par)} réabonné(s) - ❌ {len(non_inscrits_par)} non enregistré(s)")
+                        
+                        # Affichage des onglets
+                        tab1, tab2, tab3 = st.tabs(["📝 Abonnés", "🔄 Réabonnés", "❌ Non enregistrés"])
+                        
+                        with tab1:
+                            st.write(f"**Période :** {periode_aff}")
+                            if abonnes_par:
+                                data = []
+                                for a in abonnes_par:
+                                    data.append({
+                                        "Nom": a[1], "Prénom": a[2], "Matricule": a[3],
+                                        "WhatsApp": a[4], "Équipe": a[5],
+                                        "Date paiement": a[7], "Montant": f"{a[8]} FCFA"
+                                    })
+                                df = pd.DataFrame(data)
+                                st.dataframe(df, use_container_width=True)
+                                
+                                output = io.BytesIO()
+                                try:
+                                    with pd.ExcelWriter(output, engine=None) as writer:
+                                        df.to_excel(writer, sheet_name=f"Abonnes_{nom_paroisse}", index=False)
+                                    output.seek(0)
+                                    st.download_button(f"📥 Exporter les abonnés de {nom_paroisse}", data=output,
+                                                    file_name=f"abonnes_{nom_paroisse}_{annee_debut}.xlsx",
+                                                    key=f"export_abos_par_{pid}_{annee_debut}")
+                                except Exception as e:
+                                    st.error(f"Erreur export: {e}")
+                            else:
+                                st.info("Aucun abonnement enregistré")
+                        
+                        with tab2:
+                            st.write(f"**Période :** {periode_aff}")
+                            if reabonnes_par:
+                                data = []
+                                for r in reabonnes_par:
+                                    data.append({
+                                        "Nom": r[1], "Prénom": r[2], "Matricule": r[3],
+                                        "WhatsApp": r[4], "Équipe": r[5],
+                                        "Date paiement": r[7], "Montant": f"{r[8]} FCFA"
+                                    })
+                                df = pd.DataFrame(data)
+                                st.dataframe(df, use_container_width=True)
+                                
+                                output = io.BytesIO()
+                                try:
+                                    with pd.ExcelWriter(output, engine=None) as writer:
+                                        df.to_excel(writer, sheet_name=f"Reabonnes_{nom_paroisse}", index=False)
+                                    output.seek(0)
+                                    st.download_button(f"📥 Exporter les réabonnés de {nom_paroisse}", data=output,
+                                                    file_name=f"reabonnes_{nom_paroisse}_{annee_debut}.xlsx",
+                                                    key=f"export_reabos_par_{pid}_{annee_debut}")
+                                except Exception as e:
+                                    st.error(f"Erreur export: {e}")
+                            else:
+                                st.info("Aucun réabonnement enregistré")
+                        
+                        with tab3:
+                            if non_inscrits_par:
+                                for n in non_inscrits_par:
+                                    st.write(f"- {n[1]} {n[2]} ({n[3]}) - {n[5]}")
+                            else:
+                                st.success("✓ Tous les membres sont à jour")
+
     # WhatsApp
     elif menu == "💬 WhatsApp":
         st.markdown('<h2 style="color:#1A237E;">💬 Communications WhatsApp</h2>', unsafe_allow_html=True)
@@ -526,7 +928,7 @@ if st.session_state['role'] == 'diocese':
                     st.write(f"Paroisse : {a[7]}")
                     st.write(f"Équipe : {a[8]}")
                     if a[4] and a[5]:
-                        st.write(f"Période : Oct {a[4].year} – Oct {a[5].year} ({duree} an(s))")
+                        st.write(f"Période : Sept {a[4].year} – Sept {a[5].year} ({duree} an(s))")
                     if a[6]:
                         st.write(f"Commentaire : {a[6]}")
     
@@ -565,62 +967,244 @@ elif st.session_state['role'] == 'paroisse':
             st.write(f"Ville : {p[1]}")
             st.write(f"Responsable : {p[2]}")
             st.write(f"Bureau : {p[3]}")
-    
-    # Mes équipes
+
+    # Mes équipes (Paroisse) - Version avec vérification renforcée
     elif menu == "Mes équipes":
         st.markdown(f'<h2 style="color:#1A237E;">👥 Équipes de {nom_paroisse}</h2>', unsafe_allow_html=True)
+        
+        # Initialisation des états
+        if 'show_equipe_details' not in st.session_state:
+            st.session_state['show_equipe_details'] = None
+        if 'show_membres_equipe_par' not in st.session_state:
+            st.session_state['show_membres_equipe_par'] = None
+        if 'new_equipe_info' not in st.session_state:
+            st.session_state['new_equipe_info'] = None
+        if 'resp_doublon' not in st.session_state:
+            st.session_state['resp_doublon'] = None
+        
         info_paroisse = c.execute("SELECT nom, commune FROM paroisses WHERE id=?", (pid,)).fetchone()
         nom_clean = info_paroisse[0].lower()
         for mot in ["saint ", "sainte ", "notre-dame ", "dame ", "st ", "ste ", "nd "]:
             if nom_clean.startswith(mot):
                 nom_clean = nom_clean[len(mot):]
         prefixe = sans_accents(nom_clean[:3] + info_paroisse[1][:3])
+        
+        # Fonction utilitaire de création d'équipe
+        def creer_equipe(nom_eq, responsable, bureau):
+            nb = c.execute("SELECT COUNT(*) FROM equipes WHERE paroisse_id=?", (pid,)).fetchone()[0]
+            identifiant = f"{prefixe}eq{nb+1}"
+            mdp = generer_mot_de_passe()
+            c.execute("INSERT INTO equipes (nom_equipe, responsable, bureau, paroisse_id) VALUES (?,?,?,?)", 
+                    (nom_eq, responsable, bureau, pid))
+            eid_new = c.lastrowid
+            c.execute("INSERT INTO utilisateurs (username, password, role, paroisse_id, equipe_id) VALUES (?,?,?,?,?)", 
+                    (identifiant, hash_password(mdp), "equipe", pid, eid_new))
+            conn.commit()
+            st.session_state['new_equipe_info'] = {
+                'nom': nom_eq,
+                'identifiant': identifiant,
+                'mdp': mdp
+            }
+        
+        # Formulaire de création d'équipe
         with st.expander("➕ Créer une équipe"):
             with st.form("creer_equipe"):
                 nom_eq = st.text_input("Nom de l'équipe (ex: 3, Jeune, Enfant)")
-                responsable = st.text_input("Responsable (nom complet)")
+                responsable = st.text_input("Responsable")
                 bureau = st.text_area("Bureau")
-                if st.form_submit_button("Créer"):
-                    erreur = False
-                    if equipe_existe(pid, nom_eq):
-                        st.error(f"❌ Une équipe nommée '{nom_eq}' existe déjà dans cette paroisse.")
-                        erreur = True
-                    if not erreur and responsable:
-                        # Vérifier que ce responsable n'est pas déjà responsable d'une autre équipe dans le même diocèse
-                        resp_existant = c.execute('''
-                            SELECT e.id FROM equipes e
-                            JOIN paroisses p ON e.paroisse_id = p.id
-                            WHERE p.diocese_id = 1 AND e.responsable = ?
-                        ''', (responsable,)).fetchone()
-                        if resp_existant:
-                            st.error(f"❌ Le responsable '{responsable}' est déjà responsable d'une autre équipe dans le diocèse.")
-                            erreur = True
-                    if not erreur and nom_eq and responsable:
-                        nb = c.execute("SELECT COUNT(*) FROM equipes WHERE paroisse_id=?", (pid,)).fetchone()[0]
-                        identifiant = f"{prefixe}eq{nb+1}"
-                        mdp = generer_mot_de_passe()
-                        c.execute("INSERT INTO equipes (nom_equipe, responsable, bureau, paroisse_id) VALUES (?,?,?,?)", (nom_eq, responsable, bureau, pid))
-                        eid = c.lastrowid
-                        c.execute("INSERT INTO utilisateurs (username, password, role, paroisse_id, equipe_id) VALUES (?,?,?,?,?)", (identifiant, hash_password(mdp), "equipe", pid, eid))
-                        conn.commit()
-                        st.success(f"✅ Équipe '{nom_eq}' créée")
-                        st.code(f"Identifiant : {identifiant}\nMot de passe : {mdp}", language="text")
+                submitted = st.form_submit_button("Créer")
+                
+                if submitted:
+                    if nom_eq and responsable:
+                        # Vérification doublon nom
+                        existe_nom = c.execute("SELECT id FROM equipes WHERE nom_equipe=? AND paroisse_id=?", (nom_eq, pid)).fetchone()
+                        if existe_nom:
+                            st.error(f"❌ Une équipe nommée '{nom_eq}' existe déjà dans cette paroisse !")
+                        else:
+                            # Vérification doublon responsable
+                            existe_resp = c.execute("SELECT id, nom_equipe FROM equipes WHERE responsable=? AND paroisse_id=?", (responsable, pid)).fetchone()
+                            if existe_resp:
+                                st.session_state['resp_doublon'] = {
+                                    'nom_eq': nom_eq,
+                                    'responsable': responsable,
+                                    'bureau': bureau,
+                                    'equipe_existante': existe_resp[1]
+                                }
+                                st.warning(f"⚠️ Le responsable '{responsable}' est déjà responsable de l'équipe '{existe_resp[1]}'. Veuillez confirmer la création ci-dessous.")
+                            else:
+                                creer_equipe(nom_eq, responsable, bureau)
+                                st.rerun()
+                    else:
+                        st.error("Le nom et le responsable sont requis")
+            
+            # Affichage de la confirmation si doublon responsable
+            if st.session_state.get('resp_doublon'):
+                info = st.session_state['resp_doublon']
+                st.warning(f"Le responsable '{info['responsable']}' est déjà responsable de l'équipe '{info['equipe_existante']}'.")
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("✅ Confirmer la création", key="confirm_creation"):
+                        creer_equipe(info['nom_eq'], info['responsable'], info['bureau'])
+                        st.session_state['resp_doublon'] = None
                         st.rerun()
-                    elif not erreur:
-                        st.error("Le nom de l'équipe et le responsable sont obligatoires.")
-        equipes = c.execute("SELECT id, nom_equipe, responsable FROM equipes WHERE paroisse_id=?", (pid,)).fetchall()
-        if equipes:
-            st.markdown("---")
-            st.subheader("📋 Équipes existantes")
-            for eq in equipes:
-                nb_membres = c.execute("SELECT COUNT(*) FROM membres WHERE equipe_id=? AND statut='actif'", (eq[0],)).fetchone()[0]
-                st.write(f"- **{eq[1]}** : {eq[2]} ({nb_membres}/10 membres)")
+                with col2:
+                    if st.button("❌ Annuler", key="cancel_creation"):
+                        st.session_state['resp_doublon'] = None
+                        st.rerun()
+            
+            # Affichage des informations de la nouvelle équipe
+            if st.session_state.get('new_equipe_info'):
+                info = st.session_state['new_equipe_info']
+                st.success(f"✅ Équipe '{info['nom']}' créée avec succès !")
+                st.markdown(f"""
+                <div style='background-color: #e8f5e9; padding: 15px; border-radius: 10px; margin-top: 10px;'>
+                    <strong>🔑 Identifiant :</strong> <code>{info['identifiant']}</code><br>
+                    <strong>🔒 Mot de passe :</strong> <code>{info['mdp']}</code><br>
+                    <small>⚠️ Veuillez noter ces informations. Le mot de passe devra être changé à la première connexion.</small>
+                </div>
+                """, unsafe_allow_html=True)
+                if st.button("OK", key="clear_equipe_info"):
+                    st.session_state['new_equipe_info'] = None
+                    st.rerun()
+        
+        st.markdown("---")
+        
+        # Liste des équipes existantes (le reste du code inchangé)
+        equipes = c.execute("SELECT id, nom_equipe, responsable, bureau FROM equipes WHERE paroisse_id=? ORDER BY nom_equipe", (pid,)).fetchall()
+        
+        if not equipes:
+            st.info("Aucune équipe dans cette paroisse")
         else:
-            st.info("Aucune équipe créée pour le moment.")
-    
-    # Membres
+            for eq in equipes:
+                eq_id, eq_nom, eq_resp, eq_bureau = eq
+                nb_membres = c.execute("SELECT COUNT(*) FROM membres WHERE equipe_id=? AND statut='actif'", (eq_id,)).fetchone()[0]
+                
+                with st.expander(f"📌 {eq_nom} - Respo: {eq_resp} ({nb_membres}/10 membres)"):
+                    st.write(f"**Bureau :** {eq_bureau}")
+                    
+                    # Bouton pour voir les membres
+                    if st.button(f"👥 Voir les membres", key=f"par_voir_membres_{eq_id}"):
+                        if st.session_state['show_membres_equipe_par'] == eq_id:
+                            st.session_state['show_membres_equipe_par'] = None
+                        else:
+                            st.session_state['show_membres_equipe_par'] = eq_id
+                            st.session_state['show_equipe_details'] = None
+                        st.rerun()
+                    
+                    # Bouton pour modifier/supprimer l'équipe
+                    if st.button(f"⚙️ Gérer l'équipe", key=f"par_gerer_equipe_{eq_id}"):
+                        if st.session_state['show_equipe_details'] == eq_id:
+                            st.session_state['show_equipe_details'] = None
+                        else:
+                            st.session_state['show_equipe_details'] = eq_id
+                            st.session_state['show_membres_equipe_par'] = None
+                        st.rerun()
+                    
+                    # Affichage des membres de l'équipe
+                    if st.session_state.get('show_membres_equipe_par') == eq_id:
+                        st.markdown("---")
+                        st.markdown(f"#### 👤 Membres de {eq_nom}")
+                        membres_eq = c.execute("""
+                            SELECT m.id, m.matricule, m.nom, m.prenom, m.whatsapp, m.numero_meditation, m.date_adhesion
+                            FROM membres m
+                            WHERE m.equipe_id=? AND m.statut='actif'
+                            ORDER BY m.nom
+                        """, (eq_id,)).fetchall()
+                        
+                        if not membres_eq:
+                            st.info("Aucun membre dans cette équipe")
+                        else:
+                            data = []
+                            for m in membres_eq:
+                                data.append({
+                                    "Matricule": m[1],
+                                    "Nom": m[2],
+                                    "Prénom": m[3],
+                                    "WhatsApp": m[4],
+                                    "N° méditation": m[5] or "-",
+                                    "Date adhésion": m[6]
+                                })
+                            df = pd.DataFrame(data)
+                            st.dataframe(df, use_container_width=True)
+                            
+                            output = io.BytesIO()
+                            try:
+                                with pd.ExcelWriter(output, engine=None) as writer:
+                                    df.to_excel(writer, sheet_name=f"Membres_{eq_nom}", index=False)
+                                output.seek(0)
+                                st.download_button(
+                                    f"📥 Exporter les membres de {eq_nom}",
+                                    data=output,
+                                    file_name=f"membres_{eq_nom}_{nom_paroisse}_{date.today()}.xlsx",
+                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                    key=f"export_membres_par_eq_{eq_id}_{date.today()}"
+                                )
+                            except Exception as e:
+                                st.error(f"Erreur export: {e}")
+                    
+                    # Gestion de l'équipe (modification/suppression)
+                    if st.session_state.get('show_equipe_details') == eq_id:
+                        st.markdown("---")
+                        st.markdown(f"#### ⚙️ Gestion de {eq_nom}")
+                        
+                        user_info = c.execute("SELECT username FROM utilisateurs WHERE equipe_id=? AND role='equipe'", (eq_id,)).fetchone()
+                        if user_info:
+                            st.info(f"🔑 Identifiant de connexion : `{user_info[0]}`")
+                        
+                        with st.form(f"form_gerer_equipe_{eq_id}"):
+                            new_nom = st.text_input("Nom de l'équipe", value=eq_nom)
+                            new_resp = st.text_input("Responsable", value=eq_resp)
+                            new_bureau = st.text_area("Bureau", value=eq_bureau or "")
+                            
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                if st.form_submit_button("💾 Mettre à jour"):
+                                    if new_nom != eq_nom:
+                                        existe = c.execute("SELECT id FROM equipes WHERE nom_equipe=? AND paroisse_id=? AND id!=?", (new_nom, pid, eq_id)).fetchone()
+                                        if existe:
+                                            st.error(f"❌ Une équipe nommée '{new_nom}' existe déjà dans cette paroisse !")
+                                        else:
+                                            c.execute("UPDATE equipes SET nom_equipe=?, responsable=?, bureau=? WHERE id=?", 
+                                                    (new_nom, new_resp, new_bureau, eq_id))
+                                            conn.commit()
+                                            st.success("Équipe mise à jour")
+                                            st.session_state['show_equipe_details'] = None
+                                            st.rerun()
+                                    else:
+                                        c.execute("UPDATE equipes SET nom_equipe=?, responsable=?, bureau=? WHERE id=?", 
+                                                (new_nom, new_resp, new_bureau, eq_id))
+                                        conn.commit()
+                                        st.success("Équipe mise à jour")
+                                        st.session_state['show_equipe_details'] = None
+                                        st.rerun()
+                            with col2:
+                                if nb_membres == 0:
+                                    if st.form_submit_button("🗑️ Supprimer l'équipe"):
+                                        c.execute("DELETE FROM equipes WHERE id=?", (eq_id,))
+                                        c.execute("DELETE FROM utilisateurs WHERE equipe_id=?", (eq_id,))
+                                        conn.commit()
+                                        st.success("Équipe supprimée")
+                                        st.session_state['show_equipe_details'] = None
+                                        st.rerun()
+                                else:
+                                    st.warning(f"⚠️ Impossible de supprimer : {nb_membres} membre(s) dans cette équipe")
+                        
+                        if user_info:
+                            if st.button(f"🔄 Réinitialiser le mot de passe", key=f"reset_mdp_{eq_id}"):
+                                nouveau_mdp = generer_mot_de_passe()
+                                c.execute("UPDATE utilisateurs SET password=? WHERE equipe_id=?", (hash_password(nouveau_mdp), eq_id))
+                                conn.commit()
+                                st.success("Mot de passe réinitialisé !")
+                                st.code(f"Nouveau mot de passe : {nouveau_mdp}", language="text")    
+        
+    # Membres (Paroisse) - Version fluidifiée avec gestion unique
     elif menu == "Membres":
         st.markdown(f'<h2 style="color:#1A237E;">👤 Membres de {nom_paroisse}</h2>', unsafe_allow_html=True)
+        
+        # Initialisation des états
+        if 'open_form_par' not in st.session_state:
+            st.session_state['open_form_par'] = None
+        
         equipes = c.execute("SELECT id, nom_equipe FROM equipes WHERE paroisse_id=? ORDER BY nom_equipe", (pid,)).fetchall()
         if not equipes:
             st.warning("Aucune équipe. Créez une équipe d'abord.")
@@ -628,98 +1212,234 @@ elif st.session_state['role'] == 'paroisse':
             equipe_dict = {eq[1]: eq[0] for eq in equipes}
             choix = st.selectbox("Équipe", list(equipe_dict.keys()))
             eid = equipe_dict[choix]
-            nb = c.execute("SELECT COUNT(*) FROM membres WHERE equipe_id=? AND statut='actif'", (eid,)).fetchone()[0]
+            nb = c.execute("SELECT COUNT(*) FROM membres WHERE equipe_id=? AND statut=?", (eid, 'actif')).fetchone()[0]
             st.info(f"{nb}/10 membres")
+            
+            # Formulaire d'ajout
             if nb < 10:
-                with st.expander("➕ Ajouter un membre"):
-                    with st.form("ajout_membre"):
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            nom = st.text_input("Nom")
-                            prenom = st.text_input("Prénom")
-                            naissance = st.date_input("Date de naissance", min_value=date(1940,1,1), max_value=date.today())
-                        with col2:
-                            whatsapp = st.text_input("WhatsApp")
-                            photo = st.file_uploader("Photo", type=['jpg','png','jpeg'])
-                            date_adhesion = st.date_input("Date d'adhésion", min_value=date(1940,1,1), max_value=date.today(), value=date.today())
-                        if st.form_submit_button("Ajouter"):
-                            if nom and prenom:
-                                # Vérifier doublon stricte dans tout le diocèse
-                                existant = c.execute('''
-                                    SELECT id FROM membres 
-                                    WHERE nom = ? AND prenom = ? AND date_naissance = ? AND statut = 'actif'
-                                ''', (nom, prenom, naissance)).fetchone()
-                                if existant:
-                                    st.error("❌ Ce membre existe déjà dans le diocèse (même nom, prénom, date de naissance).")
-                                elif whatsapp:
-                                    existant_whatsapp = c.execute("SELECT id FROM membres WHERE whatsapp = ? AND statut='actif'", (whatsapp,)).fetchone()
-                                    if existant_whatsapp:
-                                        st.error("❌ Un autre membre utilise déjà ce numéro WhatsApp.")
-                                else:
-                                    matricule = generer_matricule_unique()
-                                    c.execute("INSERT INTO membres (matricule, nom, prenom, date_naissance, whatsapp, date_adhesion, paroisse_id, equipe_id, statut) VALUES (?,?,?,?,?,?,?,?,?)", (matricule, nom, prenom, naissance, whatsapp, date_adhesion, pid, eid, 'actif'))
-                                    mid = c.lastrowid
-                                    if photo:
-                                        chemin = sauvegarder_photo(photo, matricule)
-                                        c.execute("UPDATE membres SET photo_path=? WHERE id=?", (chemin, mid))
-                                    conn.commit()
-                                    st.success(f"Ajouté ! Matricule: {matricule}")
+                if st.button("➕ Ajouter un membre", key="btn_ajout_par"):
+                    if st.session_state['open_form_par'] == "ajout":
+                        st.session_state['open_form_par'] = None
+                    else:
+                        st.session_state['open_form_par'] = "ajout"
+                    st.rerun()
+                
+                if st.session_state.get('open_form_par') == "ajout":
+                    with st.container():
+                        st.markdown("---")
+                        st.markdown("#### ➕ Nouveau membre")
+                        with st.form("form_ajout_par"):
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                nom = st.text_input("Nom")
+                                prenom = st.text_input("Prénom")
+                                naissance = st.date_input("Date de naissance", min_value=date(1940,1,1), max_value=date.today())
+                            with col2:
+                                whatsapp = st.text_input("WhatsApp")
+                                numero_meditation = st.text_input("N° méditation", max_chars=2)
+                                photo = st.file_uploader("Photo", type=['jpg','png','jpeg'])
+                                date_adhesion = st.date_input("Date d'adhésion", min_value=date(1940,1,1), max_value=date.today(), value=date.today())
+                            
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                if st.form_submit_button("❌ Annuler"):
+                                    st.session_state['open_form_par'] = None
                                     st.rerun()
-                            else:
-                                st.error("Le nom et le prénom sont obligatoires.")
-            membres = c.execute("SELECT id, matricule, nom, prenom, date_naissance, whatsapp, photo_path, date_adhesion FROM membres WHERE equipe_id=? AND statut='actif' ORDER BY nom", (eid,)).fetchall()
+                            with col2:
+                                if st.form_submit_button("✅ Ajouter"):
+                                    if nom and prenom:
+                                        existant = c.execute("SELECT id FROM membres WHERE nom=? AND prenom=? AND date_naissance=? AND statut=?", 
+                                                        (nom, prenom, naissance, 'actif')).fetchone()
+                                        if existant:
+                                            st.error("Ce membre existe déjà actif.")
+                                        else:
+                                            matricule = generer_matricule_unique()
+                                            c.execute("""INSERT INTO membres 
+                                                (matricule, nom, prenom, date_naissance, whatsapp, date_adhesion, paroisse_id, equipe_id, statut, numero_meditation) 
+                                                VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                                                (matricule, nom, prenom, naissance, whatsapp, date_adhesion, pid, eid, 'actif', numero_meditation))
+                                            mid = c.lastrowid
+                                            if photo:
+                                                chemin = sauvegarder_photo(photo, matricule)
+                                                c.execute("UPDATE membres SET photo_path=? WHERE id=?", (chemin, mid))
+                                            conn.commit()
+                                            st.session_state['open_form_par'] = None
+                                            st.success(f"Ajouté ! Matricule: {matricule}")
+                                            st.rerun()
+                                    else:
+                                        st.error("Le nom et le prénom sont requis.")
+            
+            # Liste des membres
+            st.markdown("---")
+            membres = c.execute("""
+                SELECT id, matricule, nom, prenom, whatsapp, photo_path, date_adhesion, numero_meditation 
+                FROM membres 
+                WHERE equipe_id=? AND statut=? 
+                ORDER BY nom
+            """, (eid, 'actif')).fetchall()
+            
             for m in membres:
-                with st.expander(f"{m[2]} {m[3]} - {m[1]}"):
+                id_m, matricule, nom, prenom, whatsapp, photo_path, date_adhesion, num_med = m
+                
+                with st.expander(f"{nom} {prenom} - {matricule}" + (f" - N° {num_med}" if num_med else "")):
                     col1, col2 = st.columns([3,1])
-                    with col1:
-                        st.write(f"📅 Naissance : {m[4]}")
-                        st.write(f"💬 WhatsApp: {m[5]}")
-                        st.write(f"📅 Adhésion: {m[7]}")
-                        if m[6] and os.path.exists(m[6]):
-                            st.image(m[6], width=80)
+                    col1.write(f"💬 WhatsApp: {whatsapp}")
+                    col1.write(f"📅 Adhésion: {date_adhesion}")
+                    if photo_path:
+                        col1.image(photo_path, width=80)
+                    
                     with col2:
-                        if st.button("✏️ Modifier", key=f"mod_{m[0]}"):
-                            st.session_state['modif_membre_id'] = m[0]
-                            st.rerun()
-                        if st.button("🗑️ Supprimer", key=f"del_{m[0]}"):
-                            c.execute("DELETE FROM membres WHERE id=?", (m[0],))
-                            conn.commit()
-                            st.rerun()
-            if 'modif_membre_id' in st.session_state:
-                mid = st.session_state['modif_membre_id']
-                membre = c.execute("SELECT nom, prenom, date_naissance, whatsapp, photo_path FROM membres WHERE id=?", (mid,)).fetchone()
-                if membre:
-                    st.markdown("---")
-                    with st.form("modif_membre"):
-                        new_nom = st.text_input("Nom", value=membre[0])
-                        new_prenom = st.text_input("Prénom", value=membre[1])
-                        new_naissance = st.date_input("Date de naissance", value=date.fromisoformat(membre[2]) if isinstance(membre[2], str) else membre[2], min_value=date(1940,1,1), max_value=date.today())
-                        new_whatsapp = st.text_input("WhatsApp", value=membre[3])
-                        new_photo = st.file_uploader("Nouvelle photo", type=['jpg','png','jpeg'])
-                        if st.form_submit_button("Enregistrer"):
-                            # Vérifier doublon en excluant l'ID courant
-                            existant = c.execute('''
-                                SELECT id FROM membres 
-                                WHERE nom = ? AND prenom = ? AND date_naissance = ? AND id != ? AND statut='actif'
-                            ''', (new_nom, new_prenom, new_naissance, mid)).fetchone()
-                            if existant:
-                                st.error("❌ Ces informations correspondent déjà à un autre membre.")
-                            elif new_whatsapp:
-                                existant_whatsapp = c.execute("SELECT id FROM membres WHERE whatsapp = ? AND id != ? AND statut='actif'", (new_whatsapp, mid)).fetchone()
-                                if existant_whatsapp:
-                                    st.error("❌ Un autre membre utilise déjà ce numéro WhatsApp.")
+                        if st.button("✏️ Modifier", key=f"par_btn_mod_{id_m}"):
+                            if st.session_state['open_form_par'] == f"mod_{id_m}":
+                                st.session_state['open_form_par'] = None
                             else:
-                                c.execute("UPDATE membres SET nom=?, prenom=?, date_naissance=?, whatsapp=? WHERE id=?", (new_nom, new_prenom, new_naissance, new_whatsapp, mid))
-                                if new_photo:
-                                    if membre[4] and os.path.exists(membre[4]):
-                                        os.remove(membre[4])
-                                    chemin = sauvegarder_photo(new_photo, c.execute("SELECT matricule FROM membres WHERE id=?", (mid,)).fetchone()[0])
-                                    c.execute("UPDATE membres SET photo_path=? WHERE id=?", (chemin, mid))
-                                conn.commit()
-                                del st.session_state['modif_membre_id']
-                                st.success("Membre modifié")
-                                st.rerun()
-    
+                                st.session_state['open_form_par'] = f"mod_{id_m}"
+                            st.rerun()
+                        if st.button("📦 Archiver", key=f"par_btn_arch_{id_m}"):
+                            if st.session_state['open_form_par'] == f"arch_{id_m}":
+                                st.session_state['open_form_par'] = None
+                            else:
+                                st.session_state['open_form_par'] = f"arch_{id_m}"
+                            st.rerun()
+                        if st.button("🔄 Transférer", key=f"par_btn_transf_{id_m}"):
+                            if st.session_state['open_form_par'] == f"transf_{id_m}":
+                                st.session_state['open_form_par'] = None
+                            else:
+                                st.session_state['open_form_par'] = f"transf_{id_m}"
+                            st.rerun()
+                    
+                    # Formulaire de modification
+                    if st.session_state.get('open_form_par') == f"mod_{id_m}":
+                        st.markdown("---")
+                        st.markdown("#### ✏️ Modification")
+                        membre_data = c.execute("SELECT nom, prenom, whatsapp, photo_path, numero_meditation FROM membres WHERE id=?", (id_m,)).fetchone()
+                        if membre_data:
+                            with st.form(f"form_mod_par_{id_m}"):
+                                new_nom = st.text_input("Nom", value=membre_data[0])
+                                new_prenom = st.text_input("Prénom", value=membre_data[1])
+                                new_whatsapp = st.text_input("WhatsApp", value=membre_data[2])
+                                new_num_med = st.text_input("N° méditation", value=membre_data[4] or "", max_chars=2)
+                                new_photo = st.file_uploader("Nouvelle photo", type=['jpg','png','jpeg'])
+                                
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    if st.form_submit_button("❌ Annuler"):
+                                        st.session_state['open_form_par'] = None
+                                        st.rerun()
+                                with col2:
+                                    if st.form_submit_button("💾 Enregistrer"):
+                                        c.execute("UPDATE membres SET nom=?, prenom=?, whatsapp=?, numero_meditation=? WHERE id=?", 
+                                                (new_nom, new_prenom, new_whatsapp, new_num_med, id_m))
+                                        if new_photo:
+                                            if membre_data[3] and os.path.exists(membre_data[3]):
+                                                os.remove(membre_data[3])
+                                            chemin = sauvegarder_photo(new_photo, matricule)
+                                            c.execute("UPDATE membres SET photo_path=? WHERE id=?", (chemin, id_m))
+                                        conn.commit()
+                                        st.session_state['open_form_par'] = None
+                                        st.success("Membre modifié")
+                                        st.rerun()
+                    
+                    # Formulaire d'archivage
+                    elif st.session_state.get('open_form_par') == f"arch_{id_m}":
+                        st.markdown("---")
+                        st.markdown("#### 📦 Archivage")
+                        with st.form(f"form_arch_par_{id_m}"):
+                            situation = st.radio("Situation", ["Déplacé", "Radié", "Défunt"])
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                annee_debut_arch = st.number_input("Année de début (Sept)", min_value=2000, max_value=date.today().year+5, value=date.today().year, step=1)
+                            with col2:
+                                annee_fin_arch = st.number_input("Année de fin (Sept)", min_value=2000, max_value=date.today().year+10, value=date.today().year+1, step=1)
+                            commentaire = st.text_area("Commentaire")
+                            
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                if st.form_submit_button("❌ Annuler"):
+                                    st.session_state['open_form_par'] = None
+                                    st.rerun()
+                            with col2:
+                                if st.form_submit_button("✅ Archiver"):
+                                    if annee_fin_arch <= annee_debut_arch:
+                                        st.error("L'année de fin doit être après l'année de début.")
+                                    else:
+                                        date_debut_arch = date(annee_debut_arch, 9, 1)
+                                        date_fin_arch = date(annee_fin_arch, 9, 1)
+                                        archiver_membre(id_m, situation, date_debut_arch, date_fin_arch, commentaire,
+                                                        st.session_state['user_id'], st.session_state['username'], 'paroisse', pid, eid)
+                                        st.session_state['open_form_par'] = None
+                                        st.success("Membre archivé")
+                                        st.rerun()
+                    
+                    # Formulaire de transfert
+                    elif st.session_state.get('open_form_par') == f"transf_{id_m}":
+                        st.markdown("---")
+                        st.markdown("#### 🔄 Transfert")
+                        with st.form(f"form_transf_par_{id_m}"):
+                            paroisses = c.execute("SELECT id, nom FROM paroisses ORDER BY nom").fetchall()
+                            paroisse_dest = st.selectbox("Paroisse de destination", paroisses, format_func=lambda x: x[1])
+                            nouvelle_paroisse_id = paroisse_dest[0]
+                            
+                            equipes_dest = c.execute("SELECT id, nom_equipe FROM equipes WHERE paroisse_id=? ORDER BY nom_equipe", (nouvelle_paroisse_id,)).fetchall()
+                            if equipes_dest:
+                                equipe_dest = st.selectbox("Équipe de destination", equipes_dest, format_func=lambda x: x[1])
+                                nouvelle_equipe_id = equipe_dest[0]
+                            else:
+                                st.error("Aucune équipe dans cette paroisse")
+                                nouvelle_equipe_id = None
+                            
+                            motif = st.text_area("Motif du transfert (optionnel)")
+                            
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                if st.form_submit_button("❌ Annuler"):
+                                    st.session_state['open_form_par'] = None
+                                    st.rerun()
+                            with col2:
+                                if st.form_submit_button("✅ Transférer"):
+                                    if nouvelle_equipe_id:
+                                        if nouvelle_paroisse_id == pid:
+                                            c.execute("UPDATE membres SET equipe_id=? WHERE id=?", (nouvelle_equipe_id, id_m))
+                                            conn.commit()
+                                            st.success(f"Transfert effectué vers {equipe_dest}")
+                                        else:
+                                            date_adhesion_membre = c.execute("SELECT date_adhesion FROM membres WHERE id=?", (id_m,)).fetchone()[0]
+                                            if isinstance(date_adhesion_membre, str):
+                                                date_adhesion_membre = date.fromisoformat(date_adhesion_membre)
+                                            commentaire_archive = f"Transféré vers {paroisse_dest[1]} / {equipe_dest}"
+                                            c.execute("""INSERT INTO archives 
+                                                (membre_id, situation, date_debut, date_fin, commentaire, auteur_id, auteur_nom, auteur_role, paroisse_id, equipe_id)
+                                                VALUES (?, 'Transféré', ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                                (id_m, date_adhesion_membre, date.today(), commentaire_archive,
+                                                st.session_state['user_id'], st.session_state['username'], 'paroisse', pid, eid))
+                                            c.execute("UPDATE membres SET paroisse_id=?, equipe_id=? WHERE id=?", 
+                                                    (nouvelle_paroisse_id, nouvelle_equipe_id, id_m))
+                                            conn.commit()
+                                            st.success(f"Membre transféré vers {paroisse_dest[1]} / {equipe_dest}")
+                                        st.session_state['open_form_par'] = None
+                                        st.rerun()
+            
+            # Export Excel
+            if membres:
+                st.markdown("---")
+                st.markdown("### 📊 Export des données")
+                df_export = pd.DataFrame([(m[1], m[2], m[3], m[7], m[4], m[6]) for m in membres], 
+                                        columns=["Matricule", "Nom", "Prénom", "N° méditation", "WhatsApp", "Date adhésion"])
+                output = io.BytesIO()
+                try:
+                    with pd.ExcelWriter(output, engine=None) as writer:
+                        df_export.to_excel(writer, sheet_name=f"Membres_{choix}", index=False)
+                    output.seek(0)
+                    st.download_button(
+                        "📥 Exporter les membres (Excel)", 
+                        data=output, 
+                        file_name=f"membres_{choix}_{nom_paroisse}_{date.today()}.xlsx", 
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        key=f"export_membres_par_{choix}_{date.today()}"
+                    )
+                except Exception as e:
+                    st.error(f"Erreur export: {e}")
+
     # Statistiques
     elif menu == "Statistiques":
         st.markdown(f'<h2 style="color:#1A237E;">📊 Statistiques de {nom_paroisse}</h2>', unsafe_allow_html=True)
@@ -729,63 +1449,111 @@ elif st.session_state['role'] == 'paroisse':
         col1.metric("Équipes", nb_eq)
         col2.metric("Membres actifs", nb_m)
     
-    # Abonnements
+    # Abonnements (Paroisse) - Version hiérarchisée comme Diocèse
     elif menu == "Abonnements":
         st.markdown(f'<h2 style="color:#1A237E;">💰 Gestion des abonnements - {nom_paroisse}</h2>', unsafe_allow_html=True)
-        annee_debut = st.number_input("Année de début de la période", min_value=2020, max_value=date.today().year+1, value=date.today().year, step=1)
-        st.write(f"**Période :** {periode_affichage(annee_debut)}")
-        equipes = c.execute("SELECT id, nom_equipe FROM equipes WHERE paroisse_id=?", (pid,)).fetchall()
-        if equipes:
-            eq_dict = {eq[1]: eq[0] for eq in equipes}
-            choix_eq = st.selectbox("Équipe", list(eq_dict.keys()))
-            eid = eq_dict[choix_eq]
-            membres = c.execute("SELECT id, nom, prenom, matricule FROM membres WHERE equipe_id=? AND statut='actif' ORDER BY nom", (eid,)).fetchall()
-            for m in membres:
-                deja = verifier_abonnement(m[0], annee_debut)
-                if deja:
-                    type_ = c.execute("SELECT type_abonnement FROM abonnements WHERE membre_id=? AND annee_debut=?", (m[0], annee_debut)).fetchone()
-                    type_ = type_[0] if type_ else "abonnement"
-                    st.info(f"{m[1]} {m[2]} ({m[3]}) – ✅ Déjà {type_}")
-                else:
-                    with st.expander(f"{m[1]} {m[2]} ({m[3]}) – ❌ Non enregistré"):
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            abo = st.checkbox("📝 Abonnement", key=f"abo_{m[0]}_{annee_debut}")
-                        with col2:
-                            reabo = st.checkbox("🔄 Réabonnement", key=f"reabo_{m[0]}_{annee_debut}")
-                        if abo or reabo:
-                            montant = st.number_input("Montant (FCFA)", min_value=0, value=1000, step=500, key=f"mont_{m[0]}_{annee_debut}")
-                            if st.button("Enregistrer", key=f"btn_{m[0]}_{annee_debut}"):
-                                type_abo = "abonnement" if abo else "reabonnement"
-                                enregistrer_abonnement(m[0], annee_debut, montant, type_abo)
-                                st.success(f"{type_abo} enregistré pour {m[1]} {m[2]}")
-                                st.rerun()
-            st.markdown("---")
-            tab_liste = st.tabs(["📝 Abonnés", "🔄 Réabonnés", "❌ Non enregistrés"])
-            with tab_liste[0]:
-                abonnes = c.execute('''SELECT m.nom, m.prenom, m.matricule, a.date_paiement, a.montant
-                                       FROM membres m
-                                       JOIN abonnements a ON m.id=a.membre_id
-                                       WHERE m.equipe_id=? AND a.annee_debut=? AND a.type_abonnement='abonnement' AND a.statut='paye'
-                                       ORDER BY m.nom''', (eid, annee_debut)).fetchall()
-                for a in abonnes:
-                    st.write(f"- {a[0]} {a[1]} ({a[2]}) – payé le {a[3]} : {a[4]} FCFA")
-            with tab_liste[1]:
-                reabonnes = c.execute('''SELECT m.nom, m.prenom, m.matricule, a.date_paiement, a.montant
-                                         FROM membres m
-                                         JOIN abonnements a ON m.id=a.membre_id
-                                         WHERE m.equipe_id=? AND a.annee_debut=? AND a.type_abonnement='reabonnement' AND a.statut='paye'
-                                         ORDER BY m.nom''', (eid, annee_debut)).fetchall()
-                for r in reabonnes:
-                    st.write(f"- {r[0]} {r[1]} ({r[2]}) – payé le {r[3]} : {r[4]} FCFA")
-            with tab_liste[2]:
-                non_inscrits = c.execute('''SELECT m.nom, m.prenom, m.matricule
-                                            FROM membres m
-                                            WHERE m.equipe_id=? AND m.statut='actif' AND m.id NOT IN (
-                                                SELECT a.membre_id FROM abonnements a WHERE a.annee_debut=? AND a.statut='paye'
-                                            ) ORDER BY m.nom''', (eid, annee_debut)).fetchall()
-                for n in non_inscrits:
-                    st.write(f"- {n[0]} {n[1]} ({n[2]})")
+        
+        # Initialisation des états
+        if 'show_equipe_abos_par' not in st.session_state:
+            st.session_state['show_equipe_abos_par'] = None
+        
+        annee_debut = st.number_input("Année de début de la période", min_value=2020, max_value=date.today().year, value=date.today().year-1, step=1)
+        periode_aff = f"Sept {annee_debut} – Sept {annee_debut+1}"
+        st.write(f"**Période :** {periode_aff}")
+        
+        # Statistiques de la paroisse
+        total_membres = c.execute("SELECT COUNT(*) FROM membres WHERE paroisse_id=? AND statut='actif'", (pid,)).fetchone()[0]
+        payes = c.execute("SELECT COUNT(*) FROM abonnements a JOIN membres m ON a.membre_id=m.id WHERE m.paroisse_id=? AND a.annee_debut=? AND a.statut='paye'", (pid, annee_debut)).fetchone()[0]
+        col1, col2 = st.columns(2)
+        col1.metric("📊 Total membres actifs", total_membres)
+        col2.metric("✅ Abonnements enregistrés", payes, delta=f"{payes/total_membres*100:.0f}%" if total_membres else "0%")
+        
+        st.markdown("---")
+        st.markdown("### 👥 Équipes")
+        
+        equipes = c.execute("SELECT id, nom_equipe FROM equipes WHERE paroisse_id=? ORDER BY nom_equipe", (pid,)).fetchall()
+        
+        for eq in equipes:
+            eid_eq, nom_eq = eq
+            
+            stats_eq = c.execute("""
+                SELECT COUNT(m.id) as total,
+                    SUM(CASE WHEN a.annee_debut=? AND a.statut='paye' THEN 1 ELSE 0 END) as payes
+                FROM membres m
+                LEFT JOIN abonnements a ON m.id=a.membre_id AND a.annee_debut=?
+                WHERE m.equipe_id=? AND m.statut='actif'
+            """, (annee_debut, annee_debut, eid_eq)).fetchone()
+            
+            total_eq = stats_eq[0] or 0
+            payes_eq = stats_eq[1] or 0
+            pourcent_eq = f"{(payes_eq/total_eq*100):.0f}%" if total_eq > 0 else "0%"
+            
+            with st.expander(f"📌 {nom_eq} - {total_eq} membre(s) - {payes_eq} à jour ({pourcent_eq})"):
+                if st.button(f"📋 Voir les détails", key=f"abos_par_voir_eq_{eid_eq}"):
+                    if st.session_state['show_equipe_abos_par'] == eid_eq:
+                        st.session_state['show_equipe_abos_par'] = None
+                    else:
+                        st.session_state['show_equipe_abos_par'] = eid_eq
+                    st.rerun()
+                
+                if st.session_state.get('show_equipe_abos_par') == eid_eq:
+                    membres_eq = c.execute("""
+                        SELECT m.id, m.nom, m.prenom, m.matricule, 
+                            a.type_abonnement, a.date_paiement, a.montant
+                        FROM membres m
+                        LEFT JOIN abonnements a ON m.id=a.membre_id AND a.annee_debut=? AND a.statut='paye'
+                        WHERE m.equipe_id=? AND m.statut='actif'
+                        ORDER BY m.nom
+                    """, (annee_debut, eid_eq)).fetchall()
+                    
+                    abonnes = [m for m in membres_eq if m[4] == 'abonnement']
+                    reabonnes = [m for m in membres_eq if m[4] == 'reabonnement']
+                    non_inscrits = [m for m in membres_eq if m[4] is None]
+                    
+                    tab1, tab2, tab3 = st.tabs(["📝 Abonnés", "🔄 Réabonnés", "❌ Non enregistrés"])
+                    
+                    with tab1:
+                        st.write(f"**Période :** {periode_aff}")
+                        if abonnes:
+                            data = [{"Nom": a[1], "Prénom": a[2], "Matricule": a[3], "Date paiement": a[5], "Montant": f"{a[6]} FCFA"} for a in abonnes]
+                            st.dataframe(pd.DataFrame(data), use_container_width=True)
+                            output = io.BytesIO()
+                            try:
+                                with pd.ExcelWriter(output, engine=None) as writer:
+                                    pd.DataFrame(data).to_excel(writer, sheet_name=f"Abonnes_{nom_eq}", index=False)
+                                output.seek(0)
+                                st.download_button(f"📥 Exporter les abonnés", data=output,
+                                                file_name=f"abonnes_{nom_eq}_{nom_paroisse}_{annee_debut}.xlsx",
+                                                key=f"export_abos_par_eq_{eid_eq}_{annee_debut}")
+                            except Exception as e:
+                                st.error(f"Erreur export: {e}")
+                        else:
+                            st.info("Aucun abonnement")
+                    
+                    with tab2:
+                        st.write(f"**Période :** {periode_aff}")
+                        if reabonnes:
+                            data = [{"Nom": r[1], "Prénom": r[2], "Matricule": r[3], "Date paiement": r[5], "Montant": f"{r[6]} FCFA"} for r in reabonnes]
+                            st.dataframe(pd.DataFrame(data), use_container_width=True)
+                            output = io.BytesIO()
+                            try:
+                                with pd.ExcelWriter(output, engine=None) as writer:
+                                    pd.DataFrame(data).to_excel(writer, sheet_name=f"Reabonnes_{nom_eq}", index=False)
+                                output.seek(0)
+                                st.download_button(f"📥 Exporter les réabonnés", data=output,
+                                                file_name=f"reabonnes_{nom_eq}_{nom_paroisse}_{annee_debut}.xlsx",
+                                                key=f"export_reabos_par_eq_{eid_eq}_{annee_debut}")
+                            except Exception as e:
+                                st.error(f"Erreur export: {e}")
+                        else:
+                            st.info("Aucun réabonnement")
+                    
+                    with tab3:
+                        if non_inscrits:
+                            for n in non_inscrits:
+                                st.write(f"- {n[1]} {n[2]} ({n[3]})")
+                        else:
+                            st.success("✓ Tous les membres sont à jour")    
     
     # WhatsApp
     elif menu == "WhatsApp":
@@ -844,7 +1612,7 @@ elif st.session_state['role'] == 'paroisse':
                     st.write(f"Ajouté par : {a[8]}")
                     st.write(f"Équipe : {a[7]}")
                     if a[4] and a[5]:
-                        st.write(f"Période : Oct {a[4].year} – Oct {a[5].year} ({duree} an(s))")
+                        st.write(f"Période : Sept {a[4].year} – Sept {a[5].year} ({duree} an(s))")
                     if a[6]:
                         st.write(f"Commentaire : {a[6]}")
 
@@ -865,106 +1633,222 @@ elif st.session_state['role'] == 'equipe':
             nb = c.execute("SELECT COUNT(*) FROM membres WHERE equipe_id=? AND statut='actif'", (eid,)).fetchone()[0]
             st.metric("Effectif", f"{nb}/10")
     
-    # Mes membres
+    # Mes membres (Équipe) - Version fluidifiée
     elif menu == "Mes membres":
         st.markdown(f'<h2 style="color:#1A237E;">👤 Membres de {nom_equipe}</h2>', unsafe_allow_html=True)
-        nb = c.execute("SELECT COUNT(*) FROM membres WHERE equipe_id=? AND statut='actif'", (eid,)).fetchone()[0]
+        
+        # Initialisation des états
+        if 'open_form_eq' not in st.session_state:
+            st.session_state['open_form_eq'] = None
+        
+        # Récupérer le nom de la paroisse
+        paroisse_nom = c.execute("SELECT p.nom FROM paroisses p JOIN equipes e ON p.id = e.paroisse_id WHERE e.id=?", (eid,)).fetchone()[0]
+        
+        nb = c.execute("SELECT COUNT(*) FROM membres WHERE equipe_id=? AND statut=?", (eid, 'actif')).fetchone()[0]
         st.info(f"{nb}/10 membres")
+        
+        # Formulaire d'ajout
         if nb < 10:
-            with st.expander("➕ Ajouter un membre"):
-                with st.form("ajout_membre_eq"):
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        nom = st.text_input("Nom")
-                        prenom = st.text_input("Prénom")
-                        naissance = st.date_input("Date de naissance", min_value=date(1940,1,1), max_value=date.today())
-                    with col2:
-                        whatsapp = st.text_input("WhatsApp")
-                        photo = st.file_uploader("Photo", type=['jpg','png','jpeg'])
-                        date_adhesion = st.date_input("Date d'adhésion", min_value=date(1940,1,1), max_value=date.today(), value=date.today())
-                    if st.form_submit_button("Ajouter"):
-                        if nom and prenom:
-                            # Vérifier doublon dans tout le diocèse
-                            existant = c.execute('''
-                                SELECT id FROM membres 
-                                WHERE nom = ? AND prenom = ? AND date_naissance = ? AND statut = 'actif'
-                            ''', (nom, prenom, naissance)).fetchone()
-                            if existant:
-                                st.error("❌ Ce membre existe déjà dans le diocèse (même nom, prénom, date de naissance).")
-                            elif whatsapp:
-                                existant_whatsapp = c.execute("SELECT id FROM membres WHERE whatsapp = ? AND statut='actif'", (whatsapp,)).fetchone()
-                                if existant_whatsapp:
-                                    st.error("❌ Un autre membre utilise déjà ce numéro WhatsApp.")
-                            else:
-                                matricule = generer_matricule_unique()
-                                paroisse_id = c.execute("SELECT paroisse_id FROM equipes WHERE id=?", (eid,)).fetchone()[0]
-                                c.execute("INSERT INTO membres (matricule, nom, prenom, date_naissance, whatsapp, date_adhesion, paroisse_id, equipe_id, statut) VALUES (?,?,?,?,?,?,?,?,?)", (matricule, nom, prenom, naissance, whatsapp, date_adhesion, paroisse_id, eid, 'actif'))
-                                mid = c.lastrowid
-                                if photo:
-                                    chemin = sauvegarder_photo(photo, matricule)
-                                    c.execute("UPDATE membres SET photo_path=? WHERE id=?", (chemin, mid))
-                                conn.commit()
-                                st.success(f"Ajouté ! Matricule: {matricule}")
+            if st.button("➕ Ajouter un membre", key="btn_ajout_eq"):
+                if st.session_state['open_form_eq'] == "ajout":
+                    st.session_state['open_form_eq'] = None
+                else:
+                    st.session_state['open_form_eq'] = "ajout"
+                st.rerun()
+            
+            if st.session_state.get('open_form_eq') == "ajout":
+                with st.container():
+                    st.markdown("---")
+                    st.markdown("#### ➕ Nouveau membre")
+                    with st.form("form_ajout_eq"):
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            nom = st.text_input("Nom")
+                            prenom = st.text_input("Prénom")
+                            naissance = st.date_input("Date de naissance", min_value=date(1940,1,1), max_value=date.today())
+                        with col2:
+                            whatsapp = st.text_input("WhatsApp")
+                            numero_meditation = st.text_input("N° méditation", max_chars=2)
+                            photo = st.file_uploader("Photo", type=['jpg','png','jpeg'])
+                            date_adhesion = st.date_input("Date d'adhésion", min_value=date(1940,1,1), max_value=date.today(), value=date.today())
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.form_submit_button("❌ Annuler"):
+                                st.session_state['open_form_eq'] = None
                                 st.rerun()
-                        else:
-                            st.error("Le nom et le prénom sont obligatoires.")
-        membres = c.execute("SELECT id, matricule, nom, prenom, date_naissance, whatsapp, photo_path, date_adhesion FROM membres WHERE equipe_id=? AND statut='actif' ORDER BY nom", (eid,)).fetchall()
+                        with col2:
+                            if st.form_submit_button("✅ Ajouter"):
+                                if nom and prenom:
+                                    existant = c.execute("SELECT id FROM membres WHERE nom=? AND prenom=? AND date_naissance=? AND statut=?", 
+                                                    (nom, prenom, naissance, 'actif')).fetchone()
+                                    if existant:
+                                        st.error("Membre déjà actif")
+                                    else:
+                                        matricule = generer_matricule_unique()
+                                        paroisse_id = c.execute("SELECT paroisse_id FROM equipes WHERE id=?", (eid,)).fetchone()[0]
+                                        c.execute("""INSERT INTO membres 
+                                            (matricule, nom, prenom, date_naissance, whatsapp, date_adhesion, paroisse_id, equipe_id, statut, numero_meditation) 
+                                            VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                                            (matricule, nom, prenom, naissance, whatsapp, date_adhesion, paroisse_id, eid, 'actif', numero_meditation))
+                                        mid = c.lastrowid
+                                        if photo:
+                                            chemin = sauvegarder_photo(photo, matricule)
+                                            c.execute("UPDATE membres SET photo_path=? WHERE id=?", (chemin, mid))
+                                        conn.commit()
+                                        st.session_state['open_form_eq'] = None
+                                        st.success(f"Ajouté ! Matricule: {matricule}")
+                                        st.rerun()
+                                else:
+                                    st.error("Le nom et le prénom sont requis.")
+        
+        # Liste des membres
+        st.markdown("---")
+        membres = c.execute("""
+            SELECT id, matricule, nom, prenom, whatsapp, photo_path, date_adhesion, numero_meditation 
+            FROM membres 
+            WHERE equipe_id=? AND statut=? 
+            ORDER BY nom
+        """, (eid, 'actif')).fetchall()
+        
         for m in membres:
-            with st.expander(f"{m[2]} {m[3]} - {m[1]}"):
+            id_m, matricule, nom, prenom, whatsapp, photo_path, date_adhesion, num_med = m
+            
+            with st.expander(f"{nom} {prenom} - {matricule}" + (f" - N° {num_med}" if num_med else "")):
                 col1, col2 = st.columns([3,1])
-                with col1:
-                    st.write(f"📅 Naissance : {m[4]}")
-                    st.write(f"💬 WhatsApp: {m[5]}")
-                    st.write(f"📅 Adhésion: {m[7]}")
-                    if m[6] and os.path.exists(m[6]):
-                        st.image(m[6], width=80)
+                col1.write(f"💬 WhatsApp: {whatsapp}")
+                col1.write(f"📅 Adhésion: {date_adhesion}")
+                if photo_path:
+                    col1.image(photo_path, width=80)
+                
                 with col2:
-                    if st.button("✏️ Modifier", key=f"mod_eq_{m[0]}"):
-                        st.session_state['modif_membre_id'] = m[0]
-                        st.rerun()
-                    if st.button("🗑️ Supprimer", key=f"del_eq_{m[0]}"):
-                        c.execute("DELETE FROM membres WHERE id=?", (m[0],))
-                        conn.commit()
-                        st.rerun()
-        if 'modif_membre_id' in st.session_state:
-            mid = st.session_state['modif_membre_id']
-            membre = c.execute("SELECT nom, prenom, date_naissance, whatsapp, photo_path FROM membres WHERE id=?", (mid,)).fetchone()
-            if membre:
-                st.markdown("---")
-                with st.form("modif_membre_eq"):
-                    new_nom = st.text_input("Nom", value=membre[0])
-                    new_prenom = st.text_input("Prénom", value=membre[1])
-                    new_naissance = st.date_input("Date de naissance", value=date.fromisoformat(membre[2]) if isinstance(membre[2], str) else membre[2], min_value=date(1940,1,1), max_value=date.today())
-                    new_whatsapp = st.text_input("WhatsApp", value=membre[3])
-                    new_photo = st.file_uploader("Nouvelle photo", type=['jpg','png','jpeg'])
-                    if st.form_submit_button("Enregistrer"):
-                        existant = c.execute('''
-                            SELECT id FROM membres 
-                            WHERE nom = ? AND prenom = ? AND date_naissance = ? AND id != ? AND statut='actif'
-                        ''', (new_nom, new_prenom, new_naissance, mid)).fetchone()
-                        if existant:
-                            st.error("❌ Ces informations correspondent déjà à un autre membre.")
-                        elif new_whatsapp:
-                            existant_whatsapp = c.execute("SELECT id FROM membres WHERE whatsapp = ? AND id != ? AND statut='actif'", (new_whatsapp, mid)).fetchone()
-                            if existant_whatsapp:
-                                st.error("❌ Un autre membre utilise déjà ce numéro WhatsApp.")
+                    if st.button("✏️ Modifier", key=f"eq_btn_mod_{id_m}"):
+                        if st.session_state['open_form_eq'] == f"mod_{id_m}":
+                            st.session_state['open_form_eq'] = None
                         else:
-                            c.execute("UPDATE membres SET nom=?, prenom=?, date_naissance=?, whatsapp=? WHERE id=?", (new_nom, new_prenom, new_naissance, new_whatsapp, mid))
-                            if new_photo:
-                                if membre[4] and os.path.exists(membre[4]):
-                                    os.remove(membre[4])
-                                matricule = c.execute("SELECT matricule FROM membres WHERE id=?", (mid,)).fetchone()[0]
-                                chemin = sauvegarder_photo(new_photo, matricule)
-                                c.execute("UPDATE membres SET photo_path=? WHERE id=?", (chemin, mid))
-                            conn.commit()
-                            del st.session_state['modif_membre_id']
-                            st.success("Membre modifié")
-                            st.rerun()
-    
+                            st.session_state['open_form_eq'] = f"mod_{id_m}"
+                        st.rerun()
+                    if st.button("📦 Archiver", key=f"eq_btn_arch_{id_m}"):
+                        if st.session_state['open_form_eq'] == f"arch_{id_m}":
+                            st.session_state['open_form_eq'] = None
+                        else:
+                            st.session_state['open_form_eq'] = f"arch_{id_m}"
+                        st.rerun()
+                    if st.button("🗑️ Supprimer", key=f"eq_btn_del_{id_m}"):
+                        st.session_state['delete_membre_id'] = id_m
+                        st.rerun()
+                
+                # Formulaire de modification
+                if st.session_state.get('open_form_eq') == f"mod_{id_m}":
+                    st.markdown("---")
+                    st.markdown("#### ✏️ Modification")
+                    membre_data = c.execute("SELECT nom, prenom, whatsapp, photo_path, numero_meditation FROM membres WHERE id=?", (id_m,)).fetchone()
+                    if membre_data:
+                        with st.form(f"form_mod_eq_{id_m}"):
+                            new_nom = st.text_input("Nom", value=membre_data[0])
+                            new_prenom = st.text_input("Prénom", value=membre_data[1])
+                            new_whatsapp = st.text_input("WhatsApp", value=membre_data[2])
+                            new_num_med = st.text_input("N° méditation", value=membre_data[4] or "", max_chars=2)
+                            new_photo = st.file_uploader("Nouvelle photo", type=['jpg','png','jpeg'])
+                            
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                if st.form_submit_button("❌ Annuler"):
+                                    st.session_state['open_form_eq'] = None
+                                    st.rerun()
+                            with col2:
+                                if st.form_submit_button("💾 Enregistrer"):
+                                    c.execute("UPDATE membres SET nom=?, prenom=?, whatsapp=?, numero_meditation=? WHERE id=?", 
+                                            (new_nom, new_prenom, new_whatsapp, new_num_med, id_m))
+                                    if new_photo:
+                                        if membre_data[3] and os.path.exists(membre_data[3]):
+                                            os.remove(membre_data[3])
+                                        chemin = sauvegarder_photo(new_photo, matricule)
+                                        c.execute("UPDATE membres SET photo_path=? WHERE id=?", (chemin, id_m))
+                                    conn.commit()
+                                    st.session_state['open_form_eq'] = None
+                                    st.success("Membre modifié")
+                                    st.rerun()
+                
+                # Formulaire d'archivage
+                elif st.session_state.get('open_form_eq') == f"arch_{id_m}":
+                    st.markdown("---")
+                    st.markdown("#### 📦 Archivage")
+                    with st.form(f"form_arch_eq_{id_m}"):
+                        situation = st.radio("Situation", ["Déplacé", "Radié", "Défunt"])
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            annee_debut_arch = st.number_input("Année de début (Sept)", min_value=2000, max_value=date.today().year+5, value=date.today().year, step=1)
+                        with col2:
+                            annee_fin_arch = st.number_input("Année de fin (Sept)", min_value=2000, max_value=date.today().year+10, value=date.today().year+1, step=1)
+                        commentaire = st.text_area("Commentaire")
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.form_submit_button("❌ Annuler"):
+                                st.session_state['open_form_eq'] = None
+                                st.rerun()
+                        with col2:
+                            if st.form_submit_button("✅ Archiver"):
+                                if annee_fin_arch <= annee_debut_arch:
+                                    st.error("L'année de fin doit être après l'année de début.")
+                                else:
+                                    date_debut_arch = date(annee_debut_arch, 9, 1)
+                                    date_fin_arch = date(annee_fin_arch, 9, 1)
+                                    paroisse_id = c.execute("SELECT paroisse_id FROM equipes WHERE id=?", (eid,)).fetchone()[0]
+                                    archiver_membre(id_m, situation, date_debut_arch, date_fin_arch, commentaire,
+                                                    st.session_state['user_id'], st.session_state['username'], 'equipe', paroisse_id, eid)
+                                    st.session_state['open_form_eq'] = None
+                                    st.success("Membre archivé")
+                                    st.rerun()
+        
+        # Gestion de la suppression
+        if 'delete_membre_id' in st.session_state:
+            del_id = st.session_state['delete_membre_id']
+            membre_del = c.execute("SELECT nom, prenom, photo_path FROM membres WHERE id=?", (del_id,)).fetchone()
+            if membre_del:
+                st.warning(f"⚠️ Supprimer définitivement {membre_del[0]} {membre_del[1]} ?")
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("✅ Oui, supprimer"):
+                        if membre_del[2]:
+                            supprimer_photo(membre_del[2])
+                        c.execute("DELETE FROM membres WHERE id=?", (del_id,))
+                        c.execute("DELETE FROM abonnements WHERE membre_id=?", (del_id,))
+                        conn.commit()
+                        del st.session_state['delete_membre_id']
+                        st.success("Membre supprimé")
+                        st.rerun()
+                with col2:
+                    if st.button("❌ Annuler"):
+                        del st.session_state['delete_membre_id']
+                        st.rerun()
+        
+        # Export Excel
+        if membres:
+            st.markdown("---")
+            st.markdown("### 📊 Export des données")
+            df_export = pd.DataFrame([(m[1], m[2], m[3], m[7], m[4], m[6]) for m in membres], 
+                                    columns=["Matricule", "Nom", "Prénom", "N° méditation", "WhatsApp", "Date adhésion"])
+            output = io.BytesIO()
+            try:
+                with pd.ExcelWriter(output, engine=None) as writer:
+                    df_export.to_excel(writer, sheet_name=f"Membres_{nom_equipe}", index=False)
+                output.seek(0)
+                st.download_button(
+                    "📥 Exporter les membres (Excel)", 
+                    data=output, 
+                    file_name=f"membres_{nom_equipe}_{paroisse_nom}_{date.today()}.xlsx", 
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key=f"export_membres_eq_{eid}_{date.today()}"
+                )
+            except Exception as e:
+                st.error(f"Erreur export: {e}")
+
     # Abonnements
     elif menu == "Abonnements":
         st.markdown(f'<h2 style="color:#1A237E;">💰 Gestion des abonnements - {nom_equipe}</h2>', unsafe_allow_html=True)
-        annee_debut = st.number_input("Année de début de la période", min_value=2020, max_value=date.today().year+1, value=date.today().year, step=1)
+        annee_debut = st.number_input("Année de début de la période", min_value=2020, max_value=date.today().year, value=date.today().year-1, step=1)
         st.write(f"**Période :** {periode_affichage(annee_debut)}")
         membres = c.execute("SELECT id, nom, prenom, matricule FROM membres WHERE equipe_id=? AND statut='actif' ORDER BY nom", (eid,)).fetchall()
         for m in membres:
@@ -1045,9 +1929,9 @@ elif st.session_state['role'] == 'equipe':
                     situation = st.radio("Situation", ["Déplacé", "Radié", "Défunt"])
                     col1, col2 = st.columns(2)
                     with col1:
-                        annee_debut_arch = st.number_input("Année de début (Oct)", min_value=2000, max_value=date.today().year+5, value=date.today().year, step=1)
+                        annee_debut_arch = st.number_input("Année de début (Sept)", min_value=2000, max_value=date.today().year+5, value=date.today().year, step=1)
                     with col2:
-                        annee_fin_arch = st.number_input("Année de fin (Oct)", min_value=2000, max_value=date.today().year+10, value=date.today().year+1, step=1)
+                        annee_fin_arch = st.number_input("Année de fin (Sept)", min_value=2000, max_value=date.today().year+10, value=date.today().year+1, step=1)
                     commentaire = st.text_area("Commentaire (optionnel)")
                     if st.form_submit_button("Archiver"):
                         if annee_fin_arch <= annee_debut_arch:
@@ -1090,16 +1974,16 @@ elif st.session_state['role'] == 'equipe':
                     annee_debut_aff = "?"
                     annee_fin_aff = "?"
                 situation_affichee = afficher_situation(situation)
-                with st.expander(f"{nom} {prenom} ({matricule}) – {situation_affichee} – {duree} an(s) - Oct {annee_debut_aff} – Oct {annee_fin_aff}"):
+                with st.expander(f"{nom} {prenom} ({matricule}) – {situation_affichee} – {duree} an(s) - Sept {annee_debut_aff} – Sept {annee_fin_aff}"):
                     with st.form(f"edit_arch_{arch_id}"):
                         new_situation = st.selectbox("Situation", ["Déplacé", "Radié", "Défunt"],
                                                      index=["Déplacé","Radié","Défunt"].index(situation) if situation in ["Déplacé","Radié","Défunt"] else 0)
                         col1, col2 = st.columns(2)
                         with col1:
-                            new_annee_debut = st.number_input("Année début (Oct)", min_value=2000, max_value=date.today().year+5,
+                            new_annee_debut = st.number_input("Année début (Sept)", min_value=2000, max_value=date.today().year+5,
                                                                value=date_debut.year if date_debut else date.today().year, step=1)
                         with col2:
-                            new_annee_fin = st.number_input("Année fin (Oct)", min_value=2000, max_value=date.today().year+10,
+                            new_annee_fin = st.number_input("Année fin (Sept)", min_value=2000, max_value=date.today().year+10,
                                                             value=date_fin.year if date_fin else date.today().year+1, step=1)
                         new_comment = st.text_area("Commentaire", value=commentaire or "")
                         col1, col2 = st.columns(2)
@@ -1127,3 +2011,4 @@ elif st.session_state['role'] == 'equipe':
                                 st.info("Un défunt ne peut pas être réintégré.")
         else:
             st.info("Aucune archive pour cette équipe.")
+            

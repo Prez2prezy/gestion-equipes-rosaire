@@ -2000,7 +2000,16 @@ elif st.session_state['role'] == 'equipe':
 
             if historique:
                 for h in historique:
-                    date_h, type_h, nb_presents = h
+                    date_h_raw, type_h, nb_presents = h
+                    
+                    # ✅ CORRECTION : Conversion robuste de la date
+                    date_h = safe_date(date_h_raw)
+                    if date_h is None:
+                        continue  # Ignorer si la date est invalide
+                    
+                    # Formatage de la date
+                    date_str = date_h.strftime('%d/%m/%Y')
+                    
                     taux = (nb_presents / total_membres_equipe * 100) if total_membres_equipe > 0 else 0
                     
                     # Icône selon le type
@@ -2014,7 +2023,7 @@ elif st.session_state['role'] == 'equipe':
                     else:
                         couleur = "red"
 
-                    with st.expander(f"{icone} {date_h.strftime('%d/%m/%Y')} - {type_h} | 👥 {nb_presents}/{total_membres_equipe} présents"):
+                    with st.expander(f"{icone} {date_str} - {type_h} | 👥 {nb_presents}/{total_membres_equipe} présents"):
                         st.markdown(f"**Taux de participation :** :{couleur}[{taux:.0f}%]")
                         
                         # Lister les présents
@@ -2023,14 +2032,12 @@ elif st.session_state['role'] == 'equipe':
                             JOIN suivi_presences sp ON m.id = sp.membre_id
                             WHERE sp.equipe_id=? AND sp.date_evenement=? AND sp.type_evenement=?
                             ORDER BY m.nom
-                        ''', (eid, date_h, type_h)).fetchall()
+                        ''', (eid, date_h_raw, type_h)).fetchall()
                         
                         noms_presents = [f"{p[0]} {p[1]}" for p in presents_detail]
                         st.write("✅ **Présents :** " + ", ".join(noms_presents))
                         
                         # Lister les absents
-                        ids_presents = [p[0] for p in presents_detail] # Ici on a que nom/prenom, il faut adapter
-                        # Requête pour les absents
                         absents_detail = c.execute('''
                             SELECT nom, prenom FROM membres 
                             WHERE equipe_id=? AND statut='actif' AND id NOT IN (
@@ -2038,7 +2045,7 @@ elif st.session_state['role'] == 'equipe':
                                 WHERE equipe_id=? AND date_evenement=? AND type_evenement=?
                             )
                             ORDER BY nom
-                        ''', (eid, eid, date_h, type_h)).fetchall()
+                        ''', (eid, eid, date_h_raw, type_h)).fetchall()
                         
                         noms_absents = [f"{a[0]} {a[1]}" for a in absents_detail]
                         if noms_absents:
@@ -2046,8 +2053,8 @@ elif st.session_state['role'] == 'equipe':
                         else:
                             st.write("❌ **Absents :** Aucun ! 🎉")
             else:
-                st.info("Aucun historique de présence pour le moment.")  
-        
+                st.info("Aucun historique de présence pour le moment.")
+    
     # WhatsApp
     elif menu == "WhatsApp":
         st.markdown(f'<h2 style="color:#1A237E;">💬 Communications WhatsApp - {nom_equipe}</h2>', unsafe_allow_html=True)

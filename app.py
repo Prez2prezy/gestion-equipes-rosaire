@@ -92,6 +92,19 @@ def supprimer_photo(photo_path):
     if photo_path and os.path.exists(photo_path):
         os.remove(photo_path)
 
+def safe_date(value):
+    """Convertit une valeur en objet date de façon robuste."""
+    if value is None:
+        return None
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        try:
+            return date.fromisoformat(value)
+        except (ValueError, TypeError):
+            return None
+    return None
+
 # --- Fonctions pour les abonnements ---
 def enregistrer_abonnement(membre_id, annee_debut, montant=0, type_abonnement='abonnement'):
     date_paiement = date.today()

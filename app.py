@@ -249,6 +249,7 @@ c.execute('''CREATE TABLE IF NOT EXISTS membres (id INTEGER PRIMARY KEY, matricu
 c.execute('''CREATE TABLE IF NOT EXISTS utilisateurs (id INTEGER PRIMARY KEY, username TEXT UNIQUE, password TEXT, role TEXT, diocese_id INTEGER, paroisse_id INTEGER, equipe_id INTEGER)''')
 c.execute('''CREATE TABLE IF NOT EXISTS abonnements (id INTEGER PRIMARY KEY, membre_id INTEGER, annee_debut INTEGER, date_paiement DATE, montant REAL DEFAULT 0, type_abonnement TEXT DEFAULT 'abonnement', statut TEXT DEFAULT 'non_paye')''')
 c.execute('''CREATE TABLE IF NOT EXISTS archives (id INTEGER PRIMARY KEY, membre_id INTEGER, situation TEXT, date_debut DATE, date_fin DATE, commentaire TEXT, auteur_id INTEGER, auteur_nom TEXT, auteur_role TEXT, paroisse_id INTEGER, equipe_id INTEGER)''')
+c.execute('''CREATE TABLE IF NOT EXISTS suivi_presences (id INTEGER PRIMARY KEY, membre_id INTEGER, equipe_id INTEGER, type_evenement TEXT, date_evenement DATE, present INTEGER DEFAULT 1)''')
 conn.commit()
 
 # Migrations (ajout de colonnes si absentes)
@@ -1636,7 +1637,7 @@ elif st.session_state['role'] == 'equipe':
     eid = st.session_state['equipe_id']
     equipe_info = c.execute("SELECT nom_equipe FROM equipes WHERE id=?", (eid,)).fetchone()
     nom_equipe = equipe_info[0] if equipe_info else "Mon équipe"
-    menu = st.sidebar.radio("Navigation", ["Mon équipe", "Mes membres", "Abonnements", "WhatsApp", "Archives"])
+    menu = st.sidebar.radio("Navigation", ["Mon équipe", "Mes membres", "Abonnements", "📌 Suivi", "WhatsApp", "Archives"])
     
     # Mon équipe
     if menu == "Mon équipe":
@@ -1912,7 +1913,141 @@ elif st.session_state['role'] == 'equipe':
                                         ) ORDER BY m.nom''', (eid, annee_debut)).fetchall()
             for n in non_inscrits:
                 st.write(f"- {n[0]} {n[1]} ({n[2]})")
-    
+
+        # Suivi des présences
+    elif menu == "📌 Suivi":
+        st.markdown(f'<h2 style="color:#1A237E;">📌 Suivi des présences - {nom_equipe}</h2>', unsafe_allow_html=True)
+        
+        types_evenements = ["Prière mensuelle", "Prière commune", "Prière spéciale", "Pèlerinage"]
+        membres_actifs = c.execute("SELECT id, nom, prenom FROM membres WHERE equipe_id=? AND statut='actif' ORDER BY nom", (eid,)).fetchall()
+        
+        if not membres_actifs:
+            st.warning("Aucun membre actif dans l'équipe pour le moment.")
+        else:
+            # --- Section d'enregistrement ---
+            with st.expander("📝 Enregistrer / Modifier une séance", expanded=True):
+                # Les sélecteurs de date et type sont hors du formulaire pour permettre 
+                # le rechargement dynamique des cases cochées si on sélectionne une date passée.
+                col_sel1, col_sel2 = st.columns(2)
+                with col_sel1:
+                    date_event = st.date_input("📅 Date de l'événement", value=date.today(), key="date_suivi")
+                with col_sel2:
+                    type_event = st.selectbox("⛪ Type d'événement", types_evenements, key="type_suivi")
+                
+                with st.form("form_suivi_presences"):
+                    st.markdown(f"**Cochez les membres présents pour le {date_event.strftime('%d/%m/%Y')} ({type_event}) :**")
+                    
+                    presences = {}
+                    # Pré-remplissage des cases si un enregistrement existe déjà pour cette date/type
+                    for m in membres_actifs:
+                        existing = c.execute('''SELECT present FROM suivi_presences 
+                                                WHERE membre_id=? AND date_evenement=? AND type_evenement=? AND equipe_id=?''', 
+                                             (m[0], date_event, type_event, eid)).fetchone()
+                        est_present = bool(existing[0]) if existing else False
+                        presences[m[0]] = st.checkbox(f"{m[1]} {m[2]}", value=est_present, key=f"chk_{m[0]}_{date_event}_{type_event}")
+                    
+                    col_btn1, col_btn2 = st.columns(2)
+                    with col_btn1:
+                        submitted = st.form_submit_button("💾 Enregistrer les présences", use_container_width=True)
+                    with col_btn2:
+                        clear = st.form_submit_button("🗑️ Effacer cette séance", use_container_width=True)
+                    
+                    if submitted:
+                        # On supprime les anciens enregistrements pour cette date/type/équipe avant de recréer
+                        c.execute('''DELETE FROM suivi_presences 
+                                     WHERE equipe_id=? AND date_evenement=? AND type_evenement=?''', 
+                                  (eid, date_event, type_event))
+                        
+                        # On insère les membres cochés
+                        for m_id, present in presences.items():
+                            if present:
+                                c.execute('''INSERT INTO suivi_presences (membre_id, equipe_id, type_evenement, date_evenement, present) 
+                                             VALUES (?, ?, ?, ?, 1)''', (m_id, eid, type_event, date_event))
+                        conn.commit()
+                        st.success("Présences enregistrées avec succès ! ✅")
+                        st.rerun()
+
+                    if clear:
+                        c.execute('''DELETE FROM suivi_presences 
+                                     WHERE equipe_id=? AND date_evenement=? AND type_evenement=?''', 
+                                  (eid, date_event, type_event))
+                        conn.commit()
+                        st.warning("Séance effacée.")
+                        st.rerun()
+
+            # --- Section Historique et Statistiques ---
+            st.markdown("---")
+            st.subheader("📊 Historique et Statistiques")
+            
+            # Filtre pour l'historique
+            filtre_type = st.selectbox("Filtrer par type d'événement", ["Tous"] + types_evenements, key="filtre_hist")
+            
+            requete_historique = '''
+                SELECT date_evenement, type_evenement, COUNT(membre_id) as nb_presents
+                FROM suivi_presences
+                WHERE equipe_id = ?
+                {filtre}
+                GROUP BY date_evenement, type_evenement
+                ORDER BY date_evenement DESC
+                LIMIT 20
+            '''
+            if filtre_type != "Tous":
+                historique = c.execute(requete_historique.format(filtre="AND type_evenement = ?"), (eid, filtre_type)).fetchall()
+            else:
+                historique = c.execute(requete_historique.format(filtre=""), (eid,)).fetchall()
+
+            total_membres_equipe = len(membres_actifs)
+
+            if historique:
+                for h in historique:
+                    date_h, type_h, nb_presents = h
+                    taux = (nb_presents / total_membres_equipe * 100) if total_membres_equipe > 0 else 0
+                    
+                    # Icône selon le type
+                    icone = {"Prière mensuelle": "🧎", "Prière commune": "🙏", "Prière spéciale": "✨", "Pèlerinage": "🚶‍♂️"}.get(type_h, "📅")
+                    
+                    # Couleur du taux
+                    if taux >= 75:
+                        couleur = "green"
+                    elif taux >= 50:
+                        couleur = "orange"
+                    else:
+                        couleur = "red"
+
+                    with st.expander(f"{icone} {date_h.strftime('%d/%m/%Y')} - {type_h} | 👥 {nb_presents}/{total_membres_equipe} présents"):
+                        st.markdown(f"**Taux de participation :** :{couleur}[{taux:.0f}%]")
+                        
+                        # Lister les présents
+                        presents_detail = c.execute('''
+                            SELECT m.nom, m.prenom FROM membres m
+                            JOIN suivi_presences sp ON m.id = sp.membre_id
+                            WHERE sp.equipe_id=? AND sp.date_evenement=? AND sp.type_evenement=?
+                            ORDER BY m.nom
+                        ''', (eid, date_h, type_h)).fetchall()
+                        
+                        noms_presents = [f"{p[0]} {p[1]}" for p in presents_detail]
+                        st.write("✅ **Présents :** " + ", ".join(noms_presents))
+                        
+                        # Lister les absents
+                        ids_presents = [p[0] for p in presents_detail] # Ici on a que nom/prenom, il faut adapter
+                        # Requête pour les absents
+                        absents_detail = c.execute('''
+                            SELECT nom, prenom FROM membres 
+                            WHERE equipe_id=? AND statut='actif' AND id NOT IN (
+                                SELECT membre_id FROM suivi_presences 
+                                WHERE equipe_id=? AND date_evenement=? AND type_evenement=?
+                            )
+                            ORDER BY nom
+                        ''', (eid, eid, date_h, type_h)).fetchall()
+                        
+                        noms_absents = [f"{a[0]} {a[1]}" for a in absents_detail]
+                        if noms_absents:
+                            st.write("❌ **Absents :** " + ", ".join(noms_absents))
+                        else:
+                            st.write("❌ **Absents :** Aucun ! 🎉")
+            else:
+                st.info("Aucun historique de présence pour le moment.")  
+        
     # WhatsApp
     elif menu == "WhatsApp":
         st.markdown(f'<h2 style="color:#1A237E;">💬 Communications WhatsApp - {nom_equipe}</h2>', unsafe_allow_html=True)

@@ -104,7 +104,7 @@ def safe_date(value):
         except (ValueError, TypeError):
             return None
     return None
-
+    
 def afficher_historique_suivi(equipe_id, filtre_type="Tous", limit=20):
     """Affiche l'historique de présence d'une équipe (lecture seule)."""
     types_evenements = ["Prière mensuelle", "Prière commune", "Prière spéciale", "Pèlerinage"]
@@ -135,6 +135,12 @@ def afficher_historique_suivi(equipe_id, filtre_type="Tous", limit=20):
     if evenements:
         for ev in evenements:
             ev_id, date_raw, type_ev, lieu, nb_p, nb_e, nb_a = ev
+            
+            # Sécurité contre les valeurs NULL
+            nb_p = nb_p or 0
+            nb_e = nb_e or 0
+            nb_a = nb_a or 0
+            
             date_ev = safe_date(date_raw)
             if not date_ev:
                 continue
@@ -331,10 +337,11 @@ c.execute('''CREATE TABLE IF NOT EXISTS utilisateurs (id INTEGER PRIMARY KEY, us
 c.execute('''CREATE TABLE IF NOT EXISTS abonnements (id INTEGER PRIMARY KEY, membre_id INTEGER, annee_debut INTEGER, date_paiement DATE, montant REAL DEFAULT 0, type_abonnement TEXT DEFAULT 'abonnement', statut TEXT DEFAULT 'non_paye')''')
 c.execute('''CREATE TABLE IF NOT EXISTS archives (id INTEGER PRIMARY KEY, membre_id INTEGER, situation TEXT, date_debut DATE, date_fin DATE, commentaire TEXT, auteur_id INTEGER, auteur_nom TEXT, auteur_role TEXT, paroisse_id INTEGER, equipe_id INTEGER)''')
 # On supprime l'ancienne table si elle existait pour la nouvelle structure
-c.execute("DROP TABLE IF EXISTS suivi_presences")
-c.execute("DROP TABLE IF EXISTS evenements")
+
 c.execute('''CREATE TABLE IF NOT EXISTS evenements (id INTEGER PRIMARY KEY, equipe_id INTEGER, type_evenement TEXT, date_evenement DATE, lieu TEXT)''')
 c.execute('''CREATE TABLE IF NOT EXISTS suivi_presences (id INTEGER PRIMARY KEY, membre_id INTEGER, evenement_id INTEGER, statut TEXT DEFAULT 'absent')''')
+
+
 conn.commit()
 
 # Migrations (ajout de colonnes si absentes)
@@ -372,6 +379,20 @@ try:
     c.execute("ALTER TABLE archives ADD COLUMN date_fin DATE")
     conn.commit()
 except: 
+    pass
+
+
+# --- Migration pour le Suivi des présences ---
+# On vérifie si l'ancienne table suivi_presences existe avec l'ancien schéma
+try:
+    cols = c.execute("PRAGMA table_info(suivi_presences)").fetchall()
+    col_names = [col[1] for col in cols]
+    # Si la table existe mais n'a pas la colonne 'evenement_id', c'est l'ancienne version
+    if col_names and 'evenement_id' not in col_names:
+        c.execute("DROP TABLE IF EXISTS suivi_presences")
+        c.execute("DROP TABLE IF EXISTS evenements")
+        conn.commit()
+except:
     pass
 
 # --- Initialisation ---

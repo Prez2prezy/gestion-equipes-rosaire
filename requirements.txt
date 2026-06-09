@@ -2,3 +2,4 @@ streamlit
 Pillow
 pandas
 openpyxl
+supabase

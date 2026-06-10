@@ -698,6 +698,7 @@ if st.session_state['role'] == 'diocese':
                                                 "Date d'adhésion": m[5]
                                             })
                                         df = pd.DataFrame(data)
+                                        df.index = df.index + 1  # ✅ AJOUTEZ CETTE LIGNE
                                         st.dataframe(df, use_container_width=True)
                                         
                                         # Export Excel des membres de l'équipe
@@ -751,6 +752,7 @@ if st.session_state['role'] == 'diocese':
                                 "Équipe": m[6]
                             })
                         df = pd.DataFrame(data)
+                        df.index = df.index + 1  # ✅ AJOUTEZ CETTE LIGNE
                         st.dataframe(df, use_container_width=True)
                         
                         # Export Excel de tous les membres
@@ -963,6 +965,7 @@ if st.session_state['role'] == 'diocese':
                                                     "Date paiement": a[5], "Montant": f"{a[6]} FCFA"
                                                 })
                                             df = pd.DataFrame(data)
+                                            df.index = df.index + 1  # ✅ AJOUTEZ CETTE LIGNE
                                             st.dataframe(df, use_container_width=True)
                                             
                                             # Export Excel
@@ -989,6 +992,7 @@ if st.session_state['role'] == 'diocese':
                                                     "Date paiement": r[5], "Montant": f"{r[6]} FCFA"
                                                 })
                                             df = pd.DataFrame(data)
+                                            df.index = df.index + 1  # ✅ AJOUTEZ CETTE LIGNE
                                             st.dataframe(df, use_container_width=True)
                                             
                                             output = io.BytesIO()
@@ -1060,6 +1064,7 @@ if st.session_state['role'] == 'diocese':
                                         "Date paiement": a[7], "Montant": f"{a[8]} FCFA"
                                     })
                                 df = pd.DataFrame(data)
+                                df.index = df.index + 1  # ✅ AJOUTEZ CETTE LIGNE
                                 st.dataframe(df, use_container_width=True)
                                 
                                 output = io.BytesIO()
@@ -1086,6 +1091,7 @@ if st.session_state['role'] == 'diocese':
                                         "Date paiement": r[7], "Montant": f"{r[8]} FCFA"
                                     })
                                 df = pd.DataFrame(data)
+                                df.index = df.index + 1  # ✅ AJOUTEZ CETTE LIGNE
                                 st.dataframe(df, use_container_width=True)
                                 
                                 output = io.BytesIO()
@@ -1386,6 +1392,7 @@ elif st.session_state['role'] == 'paroisse':
                                     "Date adhésion": m[6]
                                 })
                             df = pd.DataFrame(data)
+                            df.index = df.index + 1  # ✅ AJOUTEZ CETTE LIGNE
                             st.dataframe(df, use_container_width=True)
                             
                             output = io.BytesIO()
@@ -1777,6 +1784,7 @@ elif st.session_state['role'] == 'paroisse':
                         st.write(f"**Période :** {periode_aff}")
                         if abonnes:
                             data = [{"Nom": a[1], "Prénom": a[2], "Matricule": a[3], "Date paiement": a[5], "Montant": f"{a[6]} FCFA"} for a in abonnes]
+                            data.index = data.index + 1  # ✅ AJOUTEZ CETTE LIGNE
                             st.dataframe(pd.DataFrame(data), use_container_width=True)
                             output = io.BytesIO()
                             try:
@@ -1795,6 +1803,7 @@ elif st.session_state['role'] == 'paroisse':
                         st.write(f"**Période :** {periode_aff}")
                         if reabonnes:
                             data = [{"Nom": r[1], "Prénom": r[2], "Matricule": r[3], "Date paiement": r[5], "Montant": f"{r[6]} FCFA"} for r in reabonnes]
+                            data.index = data.index + 1  # ✅ AJOUTEZ CETTE LIGNE
                             st.dataframe(pd.DataFrame(data), use_container_width=True)
                             output = io.BytesIO()
                             try:

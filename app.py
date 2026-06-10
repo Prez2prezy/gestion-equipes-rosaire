@@ -44,9 +44,38 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- Connexion à la base de données ---
-conn = sqlite3.connect('gestion_religieuse.db', check_same_thread=False)
-c = conn.cursor()
+# --- Connexion à la base de données (Locale ou Turso Cloud) ---
+
+# Variable globale pour vérifier si on utilise le cloud
+USE_TURSO = False
+
+try:
+    from libsql_experimental import connect as turso_connect
+    TURSO_URL = st.secrets.get("TURSO_URL")
+    TURSO_AUTH_TOKEN = st.secrets.get("TURSO_AUTH_TOKEN")
+    if TURSO_URL and TURSO_AUTH_TOKEN:
+        USE_TURSO = True
+except Exception:
+    pass  # Si la librairie n'est pas installée ou pas de secrets, on reste en local
+
+if USE_TURSO:
+    # Connexion Cloud (Turso) avec réplique locale pour la vitesse
+    conn = turso_connect("file:gestion_religieuse.db", sync_url=TURSO_URL, auth_token=TURSO_AUTH_TOKEN)
+    conn.sync() # Synchronise les données du cloud vers le local au démarrage
+    c = conn.cursor()
+else:
+    # Connexion Locale classique (pour votre PC)
+    conn = sqlite3.connect('gestion_religieuse.db', check_same_thread=False)
+    c = conn.cursor()
+
+# Fonction pour sauvegarder et synchroniser avec le cloud
+def commit_and_sync():
+    commit_and_sync()
+    if USE_TURSO:
+        try:
+            conn.sync() # Envoie les modifications au cloud immédiatement
+        except Exception as e:
+            st.error(f"Erreur de synchronisation cloud : {e}")
 
 # --- Fonctions utilitaires générales ---
 def hash_password(password):
@@ -190,7 +219,7 @@ def enregistrer_abonnement(membre_id, annee_debut, montant=0, type_abonnement='a
         c.execute('''INSERT INTO abonnements (membre_id, annee_debut, date_paiement, montant, type_abonnement, statut)
                      VALUES (?, ?, ?, ?, ?, ?)''',
                   (membre_id, annee_debut, date_paiement, montant, type_abonnement, 'paye'))
-    conn.commit()
+    commit_and_sync()
 
 def verifier_abonnement(membre_id, annee_debut):
     result = c.execute('''SELECT id FROM abonnements 
@@ -342,42 +371,42 @@ c.execute('''CREATE TABLE IF NOT EXISTS evenements (id INTEGER PRIMARY KEY, equi
 c.execute('''CREATE TABLE IF NOT EXISTS suivi_presences (id INTEGER PRIMARY KEY, membre_id INTEGER, evenement_id INTEGER, statut TEXT DEFAULT 'absent')''')
 
 
-conn.commit()
+commit_and_sync()
 
 # Migrations (ajout de colonnes si absentes)
 try: 
     c.execute("ALTER TABLE membres ADD COLUMN statut TEXT DEFAULT 'actif'")
-    conn.commit()
+    commit_and_sync()
 except: 
     pass
 
 try: 
     c.execute("ALTER TABLE membres ADD COLUMN numero_meditation TEXT")
-    conn.commit()
+    commit_and_sync()
 except: 
     pass
 
 try: 
     c.execute("ALTER TABLE abonnements ADD COLUMN annee_debut INTEGER")
-    conn.commit()
+    commit_and_sync()
 except: 
     pass
 
 try: 
     c.execute("ALTER TABLE archives ADD COLUMN situation TEXT")
-    conn.commit()
+    commit_and_sync()
 except: 
     pass
 
 try: 
     c.execute("ALTER TABLE archives ADD COLUMN date_debut DATE")
-    conn.commit()
+    commit_and_sync()
 except: 
     pass
 
 try: 
     c.execute("ALTER TABLE archives ADD COLUMN date_fin DATE")
-    conn.commit()
+    commit_and_sync()
 except: 
     pass
 
@@ -391,7 +420,7 @@ try:
     if col_names and 'evenement_id' not in col_names:
         c.execute("DROP TABLE IF EXISTS suivi_presences")
         c.execute("DROP TABLE IF EXISTS evenements")
-        conn.commit()
+        commit_and_sync()
 except:
     pass
 
@@ -399,12 +428,12 @@ except:
 c.execute("SELECT COUNT(*) FROM diocese")
 if c.fetchone()[0] == 0:
     c.execute("INSERT INTO diocese (nom, responsable, bureau) VALUES (?, ?, ?)", ("GRAND-BASSAM", "À définir", "À définir"))
-    conn.commit()
+    commit_and_sync()
 
 c.execute("SELECT COUNT(*) FROM utilisateurs WHERE role='diocese'")
 if c.fetchone()[0] == 0:
     c.execute("INSERT INTO utilisateurs (username, password, role, diocese_id) VALUES (?, ?, ?, ?)", ("diocese", hash_password("admin123"), "diocese", 1))
-    conn.commit()
+    commit_and_sync()
 
 if 'form_counter' not in st.session_state:
     st.session_state['form_counter'] = 0
@@ -476,7 +505,7 @@ if st.session_state['role'] == 'diocese':
                 nouveau_bureau = st.text_area("Nouveau bureau", value=d[1])
                 if st.button("Enregistrer"):
                     c.execute("UPDATE diocese SET responsable=?, bureau=? WHERE id=?", (nouveau_resp, nouveau_bureau, 1))
-                    conn.commit()
+                    commit_and_sync()
                     st.success("Mis à jour !")
                     st.rerun()
     
@@ -503,7 +532,7 @@ if st.session_state['role'] == 'diocese':
                         username = f"paroisse_{pid}"
                         mdp = generer_mot_de_passe()
                         c.execute("INSERT INTO utilisateurs (username, password, role, diocese_id, paroisse_id) VALUES (?,?,?,?,?)", (username, hash_password(mdp), "paroisse", 1, pid))
-                        conn.commit()
+                        commit_and_sync()
                         st.success(f"✅ Paroisse '{nom}' créée")
                         st.markdown(f"<div style='background:#e8f5e9;padding:15px;border-radius:10px'>🔑 Identifiant : <code>{username}</code><br>🔒 Mot de passe : <code>{mdp}</code></div>", unsafe_allow_html=True)
                 else:
@@ -705,7 +734,7 @@ if st.session_state['role'] == 'diocese':
                     if st.button(f"🔄 Réinitialiser le mot de passe", key=f"reset_par_{p[0]}"):
                         nouveau = generer_mot_de_passe()
                         c.execute("UPDATE utilisateurs SET password=? WHERE id=?", (hash_password(nouveau), user[0]))
-                        conn.commit()
+                        commit_and_sync()
                         st.success("Mot de passe réinitialisé !")
                         st.code(f"Nouveau mot de passe : {nouveau}", language="text")
                         st.rerun()
@@ -1093,7 +1122,7 @@ if st.session_state['role'] == 'diocese':
                 c.execute("DELETE FROM equipes")
                 c.execute("DELETE FROM paroisses")
                 c.execute("DELETE FROM utilisateurs WHERE role != 'diocese'")
-                conn.commit()
+                commit_and_sync()
                 st.success("Toutes les données ont été supprimées")
                 st.balloons()
                 st.rerun()
@@ -1145,7 +1174,7 @@ elif st.session_state['role'] == 'paroisse':
             eid_new = c.lastrowid
             c.execute("INSERT INTO utilisateurs (username, password, role, paroisse_id, equipe_id) VALUES (?,?,?,?,?)", 
                     (identifiant, hash_password(mdp), "equipe", pid, eid_new))
-            conn.commit()
+            commit_and_sync()
             st.session_state['new_equipe_info'] = {
                 'nom': nom_eq,
                 'identifiant': identifiant,
@@ -1312,14 +1341,14 @@ elif st.session_state['role'] == 'paroisse':
                                         else:
                                             c.execute("UPDATE equipes SET nom_equipe=?, responsable=?, bureau=? WHERE id=?", 
                                                     (new_nom, new_resp, new_bureau, eq_id))
-                                            conn.commit()
+                                            commit_and_sync()
                                             st.success("Équipe mise à jour")
                                             st.session_state['show_equipe_details'] = None
                                             st.rerun()
                                     else:
                                         c.execute("UPDATE equipes SET nom_equipe=?, responsable=?, bureau=? WHERE id=?", 
                                                 (new_nom, new_resp, new_bureau, eq_id))
-                                        conn.commit()
+                                        commit_and_sync()
                                         st.success("Équipe mise à jour")
                                         st.session_state['show_equipe_details'] = None
                                         st.rerun()
@@ -1328,7 +1357,7 @@ elif st.session_state['role'] == 'paroisse':
                                     if st.form_submit_button("🗑️ Supprimer l'équipe"):
                                         c.execute("DELETE FROM equipes WHERE id=?", (eq_id,))
                                         c.execute("DELETE FROM utilisateurs WHERE equipe_id=?", (eq_id,))
-                                        conn.commit()
+                                        commit_and_sync()
                                         st.success("Équipe supprimée")
                                         st.session_state['show_equipe_details'] = None
                                         st.rerun()
@@ -1339,7 +1368,7 @@ elif st.session_state['role'] == 'paroisse':
                             if st.button(f"🔄 Réinitialiser le mot de passe", key=f"reset_mdp_{eq_id}"):
                                 nouveau_mdp = generer_mot_de_passe()
                                 c.execute("UPDATE utilisateurs SET password=? WHERE equipe_id=?", (hash_password(nouveau_mdp), eq_id))
-                                conn.commit()
+                                commit_and_sync()
                                 st.success("Mot de passe réinitialisé !")
                                 st.code(f"Nouveau mot de passe : {nouveau_mdp}", language="text")    
         
@@ -1408,7 +1437,7 @@ elif st.session_state['role'] == 'paroisse':
                                             if photo:
                                                 chemin = sauvegarder_photo(photo, matricule)
                                                 c.execute("UPDATE membres SET photo_path=? WHERE id=?", (chemin, mid))
-                                            conn.commit()
+                                            commit_and_sync()
                                             st.session_state['open_form_par'] = None
                                             st.success(f"Ajouté ! Matricule: {matricule}")
                                             st.rerun()
@@ -1481,7 +1510,7 @@ elif st.session_state['role'] == 'paroisse':
                                                 os.remove(membre_data[3])
                                             chemin = sauvegarder_photo(new_photo, matricule)
                                             c.execute("UPDATE membres SET photo_path=? WHERE id=?", (chemin, id_m))
-                                        conn.commit()
+                                        commit_and_sync()
                                         st.session_state['open_form_par'] = None
                                         st.success("Membre modifié")
                                         st.rerun()
@@ -1546,7 +1575,7 @@ elif st.session_state['role'] == 'paroisse':
                                     if nouvelle_equipe_id:
                                         if nouvelle_paroisse_id == pid:
                                             c.execute("UPDATE membres SET equipe_id=? WHERE id=?", (nouvelle_equipe_id, id_m))
-                                            conn.commit()
+                                            commit_and_sync()
                                             st.success(f"Transfert effectué vers {equipe_dest}")
                                         else:
                                             date_adhesion_membre = c.execute("SELECT date_adhesion FROM membres WHERE id=?", (id_m,)).fetchone()[0]
@@ -1560,7 +1589,7 @@ elif st.session_state['role'] == 'paroisse':
                                                 st.session_state['user_id'], st.session_state['username'], 'paroisse', pid, eid))
                                             c.execute("UPDATE membres SET paroisse_id=?, equipe_id=? WHERE id=?", 
                                                     (nouvelle_paroisse_id, nouvelle_equipe_id, id_m))
-                                            conn.commit()
+                                            commit_and_sync()
                                             st.success(f"Membre transféré vers {paroisse_dest[1]} / {equipe_dest}")
                                         st.session_state['open_form_par'] = None
                                         st.rerun()
@@ -1857,7 +1886,7 @@ elif st.session_state['role'] == 'equipe':
                                         if photo:
                                             chemin = sauvegarder_photo(photo, matricule)
                                             c.execute("UPDATE membres SET photo_path=? WHERE id=?", (chemin, mid))
-                                        conn.commit()
+                                        commit_and_sync()
                                         st.session_state['open_form_eq'] = None
                                         st.success(f"Ajouté ! Matricule: {matricule}")
                                         st.rerun()
@@ -1927,7 +1956,7 @@ elif st.session_state['role'] == 'equipe':
                                             os.remove(membre_data[3])
                                         chemin = sauvegarder_photo(new_photo, matricule)
                                         c.execute("UPDATE membres SET photo_path=? WHERE id=?", (chemin, id_m))
-                                    conn.commit()
+                                    commit_and_sync()
                                     st.session_state['open_form_eq'] = None
                                     st.success("Membre modifié")
                                     st.rerun()
@@ -1977,7 +2006,7 @@ elif st.session_state['role'] == 'equipe':
                             supprimer_photo(membre_del[2])
                         c.execute("DELETE FROM membres WHERE id=?", (del_id,))
                         c.execute("DELETE FROM abonnements WHERE membre_id=?", (del_id,))
-                        conn.commit()
+                        commit_and_sync()
                         del st.session_state['delete_membre_id']
                         st.success("Membre supprimé")
                         st.rerun()
@@ -2136,7 +2165,7 @@ elif st.session_state['role'] == 'equipe':
                         for m_id, statut in statuts.items():
                             c.execute("INSERT INTO suivi_presences (membre_id, evenement_id, statut) VALUES (?, ?, ?)",
                                       (m_id, event_id, statut))
-                        conn.commit()
+                        commit_and_sync()
                         st.success("Présences enregistrées avec succès ! ✅")
                         st.rerun()
 
@@ -2144,7 +2173,7 @@ elif st.session_state['role'] == 'equipe':
                         if event_id:
                             c.execute("DELETE FROM suivi_presences WHERE evenement_id=?", (event_id,))
                             c.execute("DELETE FROM evenements WHERE id=?", (event_id,))
-                            conn.commit()
+                            commit_and_sync()
                             st.warning("Séance effacée.")
                             st.rerun()
                         else:
@@ -2203,7 +2232,7 @@ elif st.session_state['role'] == 'equipe':
                                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
                                       (membre_choisi[0], situation, date_debut_obj, date_fin_obj, commentaire,
                                        st.session_state['user_id'], st.session_state['username'], 'equipe', paroisse_id, eid))
-                            conn.commit()
+                            commit_and_sync()
                             st.success(f"✅ {membre_choisi[1]} {membre_choisi[2]} archivé.")
                             st.rerun()
         
@@ -2254,7 +2283,7 @@ elif st.session_state['role'] == 'equipe':
                                     new_date_fin = date(new_annee_fin, 10, 1)
                                     c.execute("UPDATE archives SET situation=?, date_debut=?, date_fin=?, commentaire=? WHERE id=?",
                                               (new_situation, new_date_debut, new_date_fin, new_comment, arch_id))
-                                    conn.commit()
+                                    commit_and_sync()
                                     st.success("Archive modifiée")
                                     st.rerun()
                         with col2:
@@ -2262,7 +2291,7 @@ elif st.session_state['role'] == 'equipe':
                                 if st.form_submit_button("🔄 Réintégrer (devient actif)"):
                                     c.execute("UPDATE membres SET statut='actif' WHERE id=?", (membre_id,))
                                     c.execute("DELETE FROM archives WHERE id=?", (arch_id,))
-                                    conn.commit()
+                                    commit_and_sync()
                                     st.success(f"{nom} {prenom} a été réintégré(e).")
                                     st.rerun()
                             else:

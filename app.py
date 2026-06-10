@@ -85,6 +85,13 @@ try:
 except Exception:
     pass # Reste en mode local si Cloudinary n'est pas configuré
 
+
+# Ligne de test à ajouter temporairement
+st.write("Cloud Name:", st.secrets.get("CLOUDINARY_CLOUD_NAME"))
+st.write("API Key:", st.secrets.get("CLOUDINARY_API_KEY"))
+st.write("API Secret existe ?", bool(st.secrets.get("CLOUDINARY_API_SECRET")))
+
+
 # Fonction pour sauvegarder (pas besoin de sync() en mode HTTP, commit suffit)
 def commit_and_sync():
     conn.commit()

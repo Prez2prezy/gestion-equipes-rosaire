@@ -2327,3 +2327,4 @@ elif st.session_state['role'] == 'equipe':
                                 st.info("Un défunt ne peut pas être réintégré.")
         else:
             st.info("Aucune archive pour cette équipe.")
+            

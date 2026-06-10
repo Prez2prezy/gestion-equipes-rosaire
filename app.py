@@ -50,7 +50,7 @@ st.markdown("""
 USE_TURSO = False
 
 try:
-    from libsql_experimental import connect as turso_connect
+    from libsql_client import connect as turso_connect
     TURSO_URL = st.secrets.get("TURSO_URL")
     TURSO_AUTH_TOKEN = st.secrets.get("TURSO_AUTH_TOKEN")
     if TURSO_URL and TURSO_AUTH_TOKEN:
@@ -59,23 +59,18 @@ except Exception:
     pass  # Si la librairie n'est pas installée ou pas de secrets, on reste en local
 
 if USE_TURSO:
-    # Connexion Cloud (Turso) avec réplique locale pour la vitesse
-    conn = turso_connect("file:gestion_religieuse.db", sync_url=TURSO_URL, auth_token=TURSO_AUTH_TOKEN)
-    conn.sync() # Synchronise les données du cloud vers le local au démarrage
+    # Connexion Cloud (Turso) en mode HTTP (plus stable sur Streamlit Cloud)
+    # Attention : on utilise TURSO_URL directement, pas de fichier local
+    conn = turso_connect(TURSO_URL, auth_token=TURSO_AUTH_TOKEN)
     c = conn.cursor()
 else:
     # Connexion Locale classique (pour votre PC)
     conn = sqlite3.connect('gestion_religieuse.db', check_same_thread=False)
     c = conn.cursor()
 
-# Fonction pour sauvegarder et synchroniser avec le cloud
+# Fonction pour sauvegarder (pas besoin de sync() en mode HTTP, commit suffit)
 def commit_and_sync():
     conn.commit()
-    if USE_TURSO:
-        try:
-            conn.sync() # Envoie les modifications au cloud immédiatement
-        except Exception as e:
-            st.error(f"Erreur de synchronisation cloud : {e}")
 
 # --- Fonctions utilitaires générales ---
 def hash_password(password):
@@ -2327,4 +2322,3 @@ elif st.session_state['role'] == 'equipe':
                                 st.info("Un défunt ne peut pas être réintégré.")
         else:
             st.info("Aucune archive pour cette équipe.")
-            

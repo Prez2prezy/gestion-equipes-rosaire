@@ -12,6 +12,8 @@ import io
 import csv
 from io import StringIO
 import urllib.parse
+import cloudinary
+import cloudinary.uploader
 
 # --- Configuration de la page ---
 st.set_page_config(page_title="Gestionnaire des Équipes du Rosaire - Diocèse de Grand-Bassam", layout="wide")
@@ -68,6 +70,21 @@ else:
     conn = sqlite3.connect('gestion_religieuse.db', check_same_thread=False)
     c = conn.cursor()
 
+# --- Configuration de Cloudinary (Stockage Photos Cloud) ---
+
+USE_CLOUDINARY = False
+try:
+    cloudinary.config(
+        cloud_name=st.secrets.get("CLOUDINARY_CLOUD_NAME"),
+        api_key=st.secrets.get("CLOUDINARY_API_KEY"),
+        api_secret=st.secrets.get("CLOUDINARY_API_SECRET"),
+        secure=True
+    )
+    if st.secrets.get("CLOUDINARY_CLOUD_NAME"):
+        USE_CLOUDINARY = True
+except Exception:
+    pass # Reste en mode local si Cloudinary n'est pas configuré
+
 # Fonction pour sauvegarder (pas besoin de sync() en mode HTTP, commit suffit)
 def commit_and_sync():
     conn.commit()
@@ -101,19 +118,46 @@ def sans_accents(texte):
         texte = texte.replace(accent, lettre)
     return texte
 
+
+
+
 def sauvegarder_photo(photo_fichier, matricule):
     if photo_fichier is not None:
-        if not os.path.exists("photos"):
-            os.makedirs("photos")
-        chemin = f"photos/{matricule}.jpg"
-        img = Image.open(photo_fichier)
-        img = img.resize((300, 300))
-        img.save(chemin, "JPEG", quality=60)
-        return chemin
+        if USE_CLOUDINARY:
+            # Envoi vers le cloud Cloudinary
+            resultat = cloudinary.uploader.upload(
+                photo_fichier, 
+                public_id=f"rosaire_membres/{matricule}", # Nom du fichier en ligne
+                overwrite=True, # Écrase si on met à jour la photo
+                transformation=[{"width": 300, "height": 300, "crop": "fill"}] # Redimensionne auto
+            )
+            return resultat['secure_url'] # Retourne le lien HTTPS de la photo
+        else:
+            # Mode local de secours (pour votre PC)
+            if not os.path.exists("photos"):
+                os.makedirs("photos")
+            chemin = f"photos/{matricule}.jpg"
+            img = Image.open(photo_fichier)
+            img = img.resize((300, 300))
+            img.save(chemin, "JPEG", quality=60)
+            return chemin
     return None
 
 def supprimer_photo(photo_path):
-    if photo_path and os.path.exists(photo_path):
+    if not photo_path:
+        return
+    if USE_CLOUDINARY and photo_path.startswith("http"):
+        # Extraction de l'ID Cloudinary depuis l'URL pour la supprimer
+        try:
+            parts = photo_path.split('/upload/')[-1]
+            if parts.startswith('v'):
+                parts = '/'.join(parts.split('/')[1:])
+            public_id = os.path.splitext(parts)[0]
+            cloudinary.uploader.destroy(public_id)
+        except Exception:
+            pass
+    elif not photo_path.startswith("http") and os.path.exists(photo_path):
+        # Mode local de secours
         os.remove(photo_path)
 
 def safe_date(value):
@@ -740,8 +784,13 @@ if st.session_state['role'] == 'diocese':
                 col1, col2 = st.columns([2,1])
                 col1.write(f"**{m[1]} {m[2]}** - {m[0]}")
                 col1.write(f"💬 WhatsApp: {m[3]} - Paroisse: {m[4]} - Équipe: {m[5]}")
-                if m[6] and os.path.exists(m[6]):
-                    col2.image(m[6], width=100)
+
+                if m[6]:
+                    try:
+                        col2.image(m[6], width=100)
+                    except:
+                        pass
+                    
             else:
                 st.error("Non trouvé ou membre archivé")
     

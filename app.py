@@ -70,7 +70,7 @@ else:
 
 # Fonction pour sauvegarder et synchroniser avec le cloud
 def commit_and_sync():
-    commit_and_sync()
+    conn.commit()
     if USE_TURSO:
         try:
             conn.sync() # Envoie les modifications au cloud immédiatement
@@ -207,6 +207,35 @@ def afficher_historique_suivi(equipe_id, filtre_type="Tous", limit=20):
                     st.write("❌ **Absents :** " + ", ".join([f"{a[0]} {a[1]}" for a in absents]))
     else:
         st.info("Aucun historique de présence pour le moment.")
+
+# ✅ Fonction centralisée pour archiver un membre
+def archiver_membre(membre_id, situation, annee_debut, annee_fin, commentaire, auteur_id, auteur_nom, auteur_role):
+    """Archive un membre : change son statut et crée une entrée dans les archives."""
+    membre = c.execute("SELECT equipe_id FROM membres WHERE id=?", (membre_id,)).fetchone()
+    if not membre:
+        return False
+    equipe_id = membre[0]
+    paroisse_id = c.execute("SELECT paroisse_id FROM equipes WHERE id=?", (equipe_id,)).fetchone()
+    paroisse_id = paroisse_id[0] if paroisse_id else None
+
+    date_debut_obj = date(annee_debut, 10, 1)
+    date_fin_obj = date(annee_fin, 10, 1)
+
+    c.execute("UPDATE membres SET statut='archive' WHERE id=?", (membre_id,))
+    c.execute('''INSERT INTO archives (membre_id, situation, date_debut, date_fin, commentaire,
+                 auteur_id, auteur_nom, auteur_role, paroisse_id, equipe_id)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+              (membre_id, situation, date_debut_obj, date_fin_obj, commentaire,
+               auteur_id, auteur_nom, auteur_role, paroisse_id, equipe_id))
+    commit_and_sync()  # On utilise la fonction de sauvegarde unifiée
+    return True
+
+# ✅ Fonction pour réintégrer un membre archivé
+def reintegrer_membre(archive_id, membre_id):
+    """Réintègre un membre : remet le statut actif et supprime l'archive."""
+    c.execute("UPDATE membres SET statut='actif' WHERE id=?", (membre_id,))
+    c.execute("DELETE FROM archives WHERE id=?", (archive_id,))
+    commit_and_sync()  # On utilise la fonction de sauvegarde unifiée
 
 # --- Fonctions pour les abonnements ---
 def enregistrer_abonnement(membre_id, annee_debut, montant=0, type_abonnement='abonnement'):
@@ -2298,4 +2327,3 @@ elif st.session_state['role'] == 'equipe':
                                 st.info("Un défunt ne peut pas être réintégré.")
         else:
             st.info("Aucune archive pour cette équipe.")
-            

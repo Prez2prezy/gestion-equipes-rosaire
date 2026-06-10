@@ -1,5 +1,5 @@
 streamlit
-Pillow
 pandas
 openpyxl
-supabase
+pillow
+libsql-experimental

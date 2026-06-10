@@ -1,5 +1,5 @@
-streamlit
-pandas
-openpyxl
-pillow
-libsql-experimental
+streamlit>=1.37.0
+pandas>=2.0.0
+openpyxl>=3.1.0
+Pillow>=10.0.0
+libsql-experimental>=0.0.29

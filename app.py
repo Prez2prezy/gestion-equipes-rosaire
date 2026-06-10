@@ -790,7 +790,7 @@ if st.session_state['role'] == 'diocese':
                         col2.image(m[6], width=100)
                     except:
                         pass
-                    
+
             else:
                 st.error("Non trouvé ou membre archivé")
     
@@ -1213,8 +1213,21 @@ elif st.session_state['role'] == 'paroisse':
         if p:
             st.write(f"Commune : {p[0]}")
             st.write(f"Ville : {p[1]}")
-            st.write(f"Responsable : {p[2]}")
-            st.write(f"Bureau : {p[3]}")
+            st.write(f"**Responsable :** {p[2]}")
+            st.write(f"**Bureau :** {p[3]}")
+            
+            # ✅ Ajout du bouton de modification
+            with st.expander("✏️ Modifier les informations"):
+                nouveau_respo = st.text_input("Nouveau responsable", value=p[2] or "")
+                nouveau_bureau = st.text_area("Nouveau bureau", value=p[3] or "")
+                if st.button("💾 Enregistrer les modifications", key="update_paroisse"):
+                    if nouveau_respo:
+                        c.execute("UPDATE paroisses SET responsable=?, bureau=? WHERE id=?", (nouveau_respo, nouveau_bureau, pid))
+                        commit_and_sync()
+                        st.success("Informations de la paroisse mises à jour ! ✅")
+                        st.rerun()
+                    else:
+                        st.error("Le nom du responsable est obligatoire.")
 
     # Mes équipes (Paroisse) - Version avec vérification renforcée
     elif menu == "Mes équipes":
@@ -1896,7 +1909,20 @@ elif st.session_state['role'] == 'equipe':
             st.write(f"**Bureau :** {eq[1]}")
             nb = c.execute("SELECT COUNT(*) FROM membres WHERE equipe_id=? AND statut='actif'", (eid,)).fetchone()[0]
             st.metric("Effectif", f"{nb}/10")
-    
+            
+            # ✅ Ajout du bouton de modification
+            with st.expander("✏️ Modifier les informations"):
+                nouveau_respo = st.text_input("Nouveau responsable", value=eq[0] or "")
+                nouveau_bureau = st.text_area("Nouveau bureau", value=eq[1] or "")
+                if st.button("💾 Enregistrer les modifications", key="update_equipe"):
+                    if nouveau_respo:
+                        c.execute("UPDATE equipes SET responsable=?, bureau=? WHERE id=?", (nouveau_respo, nouveau_bureau, eid))
+                        commit_and_sync()
+                        st.success("Informations de l'équipe mises à jour ! ✅")
+                        st.rerun()
+                    else:
+                        st.error("Le nom du responsable est obligatoire.")    
+
     # Mes membres (Équipe) - Version fluidifiée
     elif menu == "Mes membres":
         st.markdown(f'<h2 style="color:#1A237E;">👤 Membres de {nom_equipe}</h2>', unsafe_allow_html=True)

@@ -2241,7 +2241,7 @@ elif st.session_state['role'] == 'equipe':
                             st.rerun()
                     with col2:
                         # ✅ Bouton de soumission bien présent
-                        if st.form_submit_button("🗑️ Supprimer cet (Ré)Abonnement", use_container_width=True):
+                        if st.form_submit_button("🗑️ Supprimer cet abonnement", use_container_width=True):
                             c.execute("DELETE FROM abonnements WHERE membre_id=? AND annee_debut=?", (mod_id, annee_debut))
                             commit_and_sync()
                             del st.session_state['modif_abo_id']

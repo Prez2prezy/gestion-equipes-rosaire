@@ -1717,12 +1717,6 @@ elif st.session_state['role'] == 'paroisse':
         col1.metric("Équipes", nb_eq)
         col2.metric("Membres actifs", nb_m)
     
-    
-    
-    
-    
-    
-    
     # Abonnements (Paroisse) - Version hiérarchisée comme Diocèse
     elif menu == "Abonnements":
         st.markdown(f'<h2 style="color:#1A237E;">💰 Gestion des abonnements - {nom_paroisse}</h2>', unsafe_allow_html=True)
@@ -1923,10 +1917,21 @@ elif st.session_state['role'] == 'equipe':
     eid = st.session_state['equipe_id']
     equipe_info = c.execute("SELECT nom_equipe FROM equipes WHERE id=?", (eid,)).fetchone()
     nom_equipe = equipe_info[0] if equipe_info else "Mon équipe"
-    menu = st.sidebar.radio("Navigation", ["Mon équipe", "Mes membres", "Abonnements", "📌 Suivi", "WhatsApp", "Archives"])
     
+    menu = st.sidebar.radio("Navigation", [
+        "Mon équipe", "Mes membres", "Abonnements", "WhatsApp", "Archives", "📌 Suivi"
+    ])
+
+    # ✅ Nettoyage du session_state au changement de menu (pour éviter les formulaires qui restent ouverts)
+    if st.session_state.get('last_menu') != menu:
+        for key in ['modif_membre_id', 'archiver_membre_id', 'confirmer_suppr_id', 'modif_abo_id']:
+            if key in st.session_state:
+                del st.session_state[key]
+        st.session_state['last_menu'] = menu
+
     # Mon équipe
     if menu == "Mon équipe":
+        # ... (la suite de votre code)
         st.markdown(f'<h2 style="color:#1A237E;">👥 {nom_equipe}</h2>', unsafe_allow_html=True)
         eq = c.execute("SELECT responsable, bureau FROM equipes WHERE id=?", (eid,)).fetchone()
         if eq:
@@ -2159,33 +2164,81 @@ elif st.session_state['role'] == 'equipe':
                 )
             except Exception as e:
                 st.error(f"Erreur export: {e}")
-
+    
     # Abonnements
     elif menu == "Abonnements":
         st.markdown(f'<h2 style="color:#1A237E;">💰 Gestion des abonnements - {nom_equipe}</h2>', unsafe_allow_html=True)
-        annee_debut = st.number_input("Année de début de la période", min_value=2020, max_value=date.today().year, value=date.today().year-1, step=1)
+        annee_debut = st.number_input("Année de début de la période", min_value=2020,
+                                       max_value=date.today().year + 1, value=date.today().year, step=1)
         st.write(f"**Période :** {periode_affichage(annee_debut)}")
-        membres = c.execute("SELECT id, nom, prenom, matricule FROM membres WHERE equipe_id=? AND statut='actif' ORDER BY nom", (eid,)).fetchall()
+        membres = c.execute("SELECT id, nom, prenom, matricule FROM membres WHERE equipe_id=? AND statut='actif' ORDER BY nom",
+                            (eid,)).fetchall()
+        
         for m in membres:
             deja = verifier_abonnement(m[0], annee_debut)
             if deja:
-                type_ = c.execute("SELECT type_abonnement FROM abonnements WHERE membre_id=? AND annee_debut=?", (m[0], annee_debut)).fetchone()
-                type_ = type_[0] if type_ else "abonnement"
-                st.info(f"{m[1]} {m[2]} ({m[3]}) – ✅ {type_}")
+                # Récupération du type et du montant actuel
+                abo_info = c.execute("SELECT type_abonnement, montant FROM abonnements WHERE membre_id=? AND annee_debut=?",
+                                     (m[0], annee_debut)).fetchone()
+                type_ = abo_info[0] if abo_info else "abonnement"
+                montant_ = abo_info[1] if abo_info else 0
+                type_affiche = "Abonnement" if type_ == "abonnement" else "Réabonnement"
+                
+                # Affichage avec le bouton Modifier
+                col_info, col_btn = st.columns([4, 1])
+                with col_info:
+                    st.info(f"{m[1]} {m[2]} ({m[3]}) – ✅ {type_affiche} ({montant_} FCFA)")
+                with col_btn:
+                    if st.button("✏️", key=f"mod_abo_{m[0]}_{annee_debut}"):
+                        st.session_state['modif_abo_id'] = m[0]
+                        st.rerun()
             else:
                 with st.expander(f"{m[1]} {m[2]} ({m[3]}) – ❌ Non enregistré"):
-                    col1, col2 = st.columns(2)
+                    type_abo, montant = widget_type_abonnement("eq", m[0], annee_debut)
+                    if st.button("Enregistrer", key=f"btn_eq_{m[0]}_{annee_debut}"):
+                        enregistrer_abonnement(m[0], annee_debut, montant, type_abo)
+                        st.success(f"{type_abo} enregistré")
+                        st.rerun()
+
+        # --- Formulaire de Modification d'Abonnement ---
+        if 'modif_abo_id' in st.session_state:
+            mod_id = st.session_state['modif_abo_id']
+            membre_info = c.execute("SELECT nom, prenom, matricule FROM membres WHERE id=?", (mod_id,)).fetchone()
+            abo_info = c.execute("SELECT type_abonnement, montant FROM abonnements WHERE membre_id=? AND annee_debut=?",
+                                 (mod_id, annee_debut)).fetchone()
+            
+            if membre_info and abo_info:
+                st.markdown("---")
+                st.markdown(f"### ✏️ Modifier l'abonnement de {membre_info[1]} {membre_info[0]}")
+                
+                with st.form(f"modif_abo_form_{mod_id}"):
+                    # Pré-remplissage avec les valeurs actuelles
+                    index_type = 0 if abo_info[0] == "abonnement" else 1
+                    new_type = st.radio("Type", ["📝 Abonnement", "🔄 Réabonnement"],
+                                        index=index_type, horizontal=True, key=f"mod_type_{mod_id}")
+                    new_montant = st.number_input("Montant (FCFA)", min_value=0, 
+                                                   value=abo_info[1] or 0, step=500, key=f"mod_mont_{mod_id}")
+                    
+                    col1, col2, col3 = st.columns(3)
                     with col1:
-                        abo = st.checkbox("📝 Abonnement", key=f"abo_eq_{m[0]}_{annee_debut}")
-                    with col2:
-                        reabo = st.checkbox("🔄 Réabonnement", key=f"reabo_eq_{m[0]}_{annee_debut}")
-                    if abo or reabo:
-                        montant = st.number_input("Montant (FCFA)", min_value=0, value=1000, step=500, key=f"mont_eq_{m[0]}_{annee_debut}")
-                        if st.button("Enregistrer", key=f"btn_eq_{m[0]}_{annee_debut}"):
-                            type_abo = "abonnement" if abo else "reabonnement"
-                            enregistrer_abonnement(m[0], annee_debut, montant, type_abo)
-                            st.success(f"{type_abo} enregistré")
+                        if st.form_submit_button("💾 Mettre à jour", use_container_width=True):
+                            type_str = "abonnement" if "Abonnement" in new_type else "reabonnement"
+                            enregistrer_abonnement(mod_id, annee_debut, new_montant, type_str)
+                            del st.session_state['modif_abo_id']
+                            st.success("Abonnement modifié ✅")
                             st.rerun()
+                    with col2:
+                        if st.form_submit_button("🗑️ Supprimer cet abo", use_container_width=True):
+                            c.execute("DELETE FROM abonnements WHERE membre_id=? AND annee_debut=?", (mod_id, annee_debut))
+                            commit_and_sync()
+                            del st.session_state['modif_abo_id']
+                            st.warning("Abonnement supprimé.")
+                            st.rerun()
+                    with col3:
+                        if st.form_submit_button("❌ Annuler", use_container_width=True):
+                            del st.session_state['modif_abo_id']
+                            st.rerun()
+
         st.markdown("---")
         tab_liste = st.tabs(["📝 Abonnés", "🔄 Réabonnés", "❌ Non enregistrés"])
         with tab_liste[0]:
@@ -2194,24 +2247,39 @@ elif st.session_state['role'] == 'equipe':
                                    JOIN abonnements a ON m.id=a.membre_id
                                    WHERE m.equipe_id=? AND a.annee_debut=? AND a.type_abonnement='abonnement' AND a.statut='paye'
                                    ORDER BY m.nom''', (eid, annee_debut)).fetchall()
-            for a in abonnes:
-                st.write(f"- {a[0]} {a[1]} ({a[2]}) – payé le {a[3]} : {a[4]} FCFA")
+            if abonnes:
+                data = [{"N°": i+1, "Nom": a[0], "Prénom": a[1], "Matricule": a[2], "Date paiement": a[3], "Montant": f"{a[4]} FCFA"} for i, a in enumerate(abonnes)]
+                df = pd.DataFrame(data)
+                df.index = df.index + 1
+                st.dataframe(df, use_container_width=True)
+            else:
+                st.info("Aucun abonné pour cette période.")
         with tab_liste[1]:
             reabonnes = c.execute('''SELECT m.nom, m.prenom, m.matricule, a.date_paiement, a.montant
                                      FROM membres m
                                      JOIN abonnements a ON m.id=a.membre_id
                                      WHERE m.equipe_id=? AND a.annee_debut=? AND a.type_abonnement='reabonnement' AND a.statut='paye'
                                      ORDER BY m.nom''', (eid, annee_debut)).fetchall()
-            for r in reabonnes:
-                st.write(f"- {r[0]} {r[1]} ({r[2]}) – payé le {r[3]} : {r[4]} FCFA")
+            if reabonnes:
+                data = [{"N°": i+1, "Nom": r[0], "Prénom": r[1], "Matricule": r[2], "Date paiement": r[3], "Montant": f"{r[4]} FCFA"} for i, r in enumerate(reabonnes)]
+                df = pd.DataFrame(data)
+                df.index = df.index + 1
+                st.dataframe(df, use_container_width=True)
+            else:
+                st.info("Aucun réabonné pour cette période.")
         with tab_liste[2]:
             non_inscrits = c.execute('''SELECT m.nom, m.prenom, m.matricule
                                         FROM membres m
                                         WHERE m.equipe_id=? AND m.statut='actif' AND m.id NOT IN (
                                             SELECT a.membre_id FROM abonnements a WHERE a.annee_debut=? AND a.statut='paye'
                                         ) ORDER BY m.nom''', (eid, annee_debut)).fetchall()
-            for n in non_inscrits:
-                st.write(f"- {n[0]} {n[1]} ({n[2]})")
+            if non_inscrits:
+                data = [{"N°": i+1, "Nom": n[0], "Prénom": n[1], "Matricule": n[2]} for i, n in enumerate(non_inscrits)]
+                df = pd.DataFrame(data)
+                df.index = df.index + 1
+                st.dataframe(df, use_container_width=True)
+            else:
+                st.success("🎉 Tous les membres sont à jour !")
 
     # Suivi des présences
     elif menu == "📌 Suivi":
@@ -2422,4 +2490,3 @@ elif st.session_state['role'] == 'equipe':
                                 st.info("Un défunt ne peut pas être réintégré.")
         else:
             st.info("Aucune archive pour cette équipe.")
-            

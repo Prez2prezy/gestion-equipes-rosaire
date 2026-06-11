@@ -1152,7 +1152,7 @@ if st.session_state['role'] == 'diocese':
         with tab1:
             afficher_anniversaires_whatsapp()
         with tab2:
-            annee_rappel = st.number_input("Année de début", min_value=2020, max_value=date.today().year+1, value=date.today().year, step=1, key="rappel_diocese")
+            annee_rappel = st.number_input("Année de début", min_value=2020, max_value=date.today().year, value=date.today().year-1, step=1, key="rappel_diocese")
             afficher_rappels_reabonnement_whatsapp(annee_rappel)
     
     # Export Excel
@@ -1865,7 +1865,7 @@ elif st.session_state['role'] == 'paroisse':
         with tab1:
             afficher_anniversaires_whatsapp()
         with tab2:
-            annee_rappel = st.number_input("Année de début", min_value=2020, max_value=date.today().year+1, value=date.today().year, step=1, key="rappel_paroisse")
+            annee_rappel = st.number_input("Année de début", min_value=2020, max_value=date.today().year, value=date.today().year-1, step=1, key="rappel_paroisse")
             equipes = c.execute("SELECT id, nom_equipe FROM equipes WHERE paroisse_id=?", (pid,)).fetchall()
             if equipes:
                 eq_dict = {eq[1]: eq[0] for eq in equipes}
@@ -2391,7 +2391,7 @@ elif st.session_state['role'] == 'equipe':
         with tab1:
             afficher_anniversaires_whatsapp()
         with tab2:
-            annee_rappel = st.number_input("Année de début", min_value=2020, max_value=date.today().year+1, value=date.today().year, step=1, key="rappel_equipe")
+            annee_rappel = st.number_input("Année de début", min_value=2020, max_value=date.today().year, value=date.today().year-1, step=1, key="rappel_equipe")
             afficher_rappels_reabonnement_whatsapp(annee_rappel, equipe_id=eid)
     
     # Archives

@@ -2455,7 +2455,7 @@ elif st.session_state['role'] == 'equipe':
     elif menu == "📌 Suivi":
         st.markdown(f'<h2 style="color:#1A237E;">📌 Suivi et Agenda - {nom_equipe}</h2>', unsafe_allow_html=True)
         
-        tab_passe, tab_avenir = st.tabs(["📝 Séances réalisées", "📅 Agenda - A venir"])
+        tab_passe, tab_avenir = st.tabs(["📅 Agenda - A venir", "📝 Séances réalisées"])
         # ==========================================
         # ONGLET 1 : AGENDA - A VENIR (Nouveau)
         # ==========================================

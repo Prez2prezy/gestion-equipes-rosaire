@@ -217,12 +217,18 @@ def afficher_agenda_complet_universel(equipe_id=None, paroisse_id=None, diocese_
         params.append(paroisse_id)
         # 3. Les événements du diocèse
         conditions.append("(diocese_id = 1 AND paroisse_id IS NULL AND equipe_id IS NULL)")
-        
+
     elif diocese_id:
-        # Le diocèse voit tout ce qui lui appartient
-        conditions.append("diocese_id = ?")
+        # 1. Les événements créés par le diocèse lui-même
+        conditions.append("(diocese_id = ? AND paroisse_id IS NULL AND equipe_id IS NULL)")
         params.append(diocese_id)
-    
+        # 2. Les événements créés par les paroisses du diocèse
+        conditions.append("paroisse_id IN (SELECT id FROM paroisses WHERE diocese_id = ?)")
+        params.append(diocese_id)
+        # 3. Les événements créés par les équipes du diocèse
+        conditions.append("equipe_id IN (SELECT id FROM equipes WHERE paroisse_id IN (SELECT id FROM paroisses WHERE diocese_id = ?))")
+        params.append(diocese_id)
+
     if conditions:
         query += " AND (" + " OR ".join(conditions) + ")"
         
@@ -2678,3 +2684,4 @@ elif st.session_state['role'] == 'equipe':
                                 st.info("Un défunt ne peut pas être réintégré.")
         else:
             st.info("Aucune archive pour cette équipe.")
+            

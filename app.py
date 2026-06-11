@@ -1717,6 +1717,12 @@ elif st.session_state['role'] == 'paroisse':
         col1.metric("Équipes", nb_eq)
         col2.metric("Membres actifs", nb_m)
     
+    
+    
+    
+    
+    
+    
     # Abonnements (Paroisse) - Version hiérarchisée comme Diocèse
     elif menu == "Abonnements":
         st.markdown(f'<h2 style="color:#1A237E;">💰 Gestion des abonnements - {nom_paroisse}</h2>', unsafe_allow_html=True)
@@ -1777,17 +1783,22 @@ elif st.session_state['role'] == 'paroisse':
                     abonnes = [m for m in membres_eq if m[4] == 'abonnement']
                     reabonnes = [m for m in membres_eq if m[4] == 'reabonnement']
                     non_inscrits = [m for m in membres_eq if m[4] is None]
-                    
+
                     tab1, tab2, tab3 = st.tabs(["📝 Abonnés", "🔄 Réabonnés", "❌ Non enregistrés"])
                     
                     with tab1:
                         st.write(f"**Période :** {periode_aff}")
                         if abonnes:
-                            data = [{"Nom": a[1], "Prénom": a[2], "Matricule": a[3], "Date paiement": a[5], "Montant": f"{a[6]} FCFA"} for a in abonnes]
-                            st.dataframe(pd.DataFrame(data), use_container_width=True)
+                            data = [{"N°": i+1, "Nom": a[1], "Prénom": a[2], "Matricule": a[3], "Date paiement": a[5], "Montant": f"{a[6]} FCFA"} for i, a in enumerate(abonnes)]
+                            df_abonnes = pd.DataFrame(data)
+                            # ✅ CORRECTION : On met l'index Pandas à 1 au lieu de 0
+                            df_abonnes.index = df_abonnes.index + 1
+                            st.dataframe(df_abonnes, use_container_width=True)
+                            
                             output = io.BytesIO()
                             try:
                                 with pd.ExcelWriter(output, engine=None) as writer:
+                                    # Pour l'export Excel, on garde index=False pour ne pas avoir la colonne d'index en double
                                     pd.DataFrame(data).to_excel(writer, sheet_name=f"Abonnes_{nom_eq}", index=False)
                                 output.seek(0)
                                 st.download_button(f"📥 Exporter les abonnés", data=output,
@@ -1801,8 +1812,12 @@ elif st.session_state['role'] == 'paroisse':
                     with tab2:
                         st.write(f"**Période :** {periode_aff}")
                         if reabonnes:
-                            data = [{"Nom": r[1], "Prénom": r[2], "Matricule": r[3], "Date paiement": r[5], "Montant": f"{r[6]} FCFA"} for r in reabonnes]
-                            st.dataframe(pd.DataFrame(data), use_container_width=True)
+                            data = [{"N°": i+1, "Nom": r[1], "Prénom": r[2], "Matricule": r[3], "Date paiement": r[5], "Montant": f"{r[6]} FCFA"} for i, r in enumerate(reabonnes)]
+                            df_reabonnes = pd.DataFrame(data)
+                            # ✅ CORRECTION : On met l'index Pandas à 1 au lieu de 0
+                            df_reabonnes.index = df_reabonnes.index + 1
+                            st.dataframe(df_reabonnes, use_container_width=True)
+                            
                             output = io.BytesIO()
                             try:
                                 with pd.ExcelWriter(output, engine=None) as writer:
@@ -1818,12 +1833,15 @@ elif st.session_state['role'] == 'paroisse':
                     
                     with tab3:
                         if non_inscrits:
-                            for n in non_inscrits:
-                                st.write(f"- {n[1]} {n[2]} ({n[3]})")
+                            # ✅ AMÉLIORATION : Affichage sous forme de tableau numéroté au lieu de tirets
+                            data_non_inscrits = [{"N°": i+1, "Nom": n[1], "Prénom": n[2], "Matricule": n[3]} for i, n in enumerate(non_inscrits)]
+                            df_non_inscrits = pd.DataFrame(data_non_inscrits)
+                            df_non_inscrits.index = df_non_inscrits.index + 1
+                            st.dataframe(df_non_inscrits, use_container_width=True)
                         else:
                             st.success("✓ Tous les membres sont à jour")    
-    
-        # Suivi consultatif Paroisse
+
+    # Suivi consultatif Paroisse
     elif menu == "📌 Suivi":
         st.markdown(f'<h2 style="color:#1A237E;">📌 Suivi des présences - {nom_paroisse}</h2>', unsafe_allow_html=True)
         equipes = c.execute("SELECT id, nom_equipe FROM equipes WHERE paroisse_id=?", (pid,)).fetchall()
@@ -2404,3 +2422,4 @@ elif st.session_state['role'] == 'equipe':
                                 st.info("Un défunt ne peut pas être réintégré.")
         else:
             st.info("Aucune archive pour cette équipe.")
+            

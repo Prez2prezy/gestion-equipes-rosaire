@@ -1152,7 +1152,7 @@ if st.session_state['role'] == 'diocese':
         with tab1:
             afficher_anniversaires_whatsapp()
         with tab2:
-            annee_rappel = st.number_input("Année de début", min_value=2020, max_value=date.today().year, value=date.today().year-1, step=1, key="rappel_diocese")
+            annee_rappel = st.number_input("Année de début", min_value=2020, max_value=date.today().year+1, value=date.today().year, step=1, key="rappel_diocese")
             afficher_rappels_reabonnement_whatsapp(annee_rappel)
     
     # Export Excel
@@ -1865,7 +1865,7 @@ elif st.session_state['role'] == 'paroisse':
         with tab1:
             afficher_anniversaires_whatsapp()
         with tab2:
-            annee_rappel = st.number_input("Année de début", min_value=2020, max_value=date.today().year, value=date.today().year-1, step=1, key="rappel_paroisse")
+            annee_rappel = st.number_input("Année de début", min_value=2020, max_value=date.today().year+1, value=date.today().year, step=1, key="rappel_paroisse")
             equipes = c.execute("SELECT id, nom_equipe FROM equipes WHERE paroisse_id=?", (pid,)).fetchall()
             if equipes:
                 eq_dict = {eq[1]: eq[0] for eq in equipes}
@@ -2223,11 +2223,16 @@ elif st.session_state['role'] == 'equipe':
                     index_type = 0 if abo_info[0] == "abonnement" else 1
                     new_type = st.radio("Type", ["📝 Abonnement", "🔄 Réabonnement"],
                                         index=index_type, horizontal=True, key=f"mod_type_{mod_id}")
+                    
+                    # ✅ CORRECTION : On force la conversion en 'int' pour éviter l'erreur de type numérique
+                    montant_actuel = int(abo_info[1]) if abo_info[1] is not None else 0
+                    
                     new_montant = st.number_input("Montant (FCFA)", min_value=0, 
-                                                   value=abo_info[1] or 0, step=500, key=f"mod_mont_{mod_id}")
+                                                   value=montant_actuel, step=500, key=f"mod_mont_{mod_id}")
                     
                     col1, col2, col3 = st.columns(3)
                     with col1:
+                        # ✅ Bouton de soumission bien présent
                         if st.form_submit_button("💾 Mettre à jour", use_container_width=True):
                             type_str = "abonnement" if "Abonnement" in new_type else "reabonnement"
                             enregistrer_abonnement(mod_id, annee_debut, new_montant, type_str)
@@ -2235,6 +2240,7 @@ elif st.session_state['role'] == 'equipe':
                             st.success("Abonnement modifié ✅")
                             st.rerun()
                     with col2:
+                        # ✅ Bouton de soumission bien présent
                         if st.form_submit_button("🗑️ Supprimer cet abo", use_container_width=True):
                             c.execute("DELETE FROM abonnements WHERE membre_id=? AND annee_debut=?", (mod_id, annee_debut))
                             commit_and_sync()
@@ -2242,6 +2248,7 @@ elif st.session_state['role'] == 'equipe':
                             st.warning("Abonnement supprimé.")
                             st.rerun()
                     with col3:
+                        # ✅ Bouton de soumission bien présent
                         if st.form_submit_button("❌ Annuler", use_container_width=True):
                             del st.session_state['modif_abo_id']
                             st.rerun()
@@ -2391,7 +2398,7 @@ elif st.session_state['role'] == 'equipe':
         with tab1:
             afficher_anniversaires_whatsapp()
         with tab2:
-            annee_rappel = st.number_input("Année de début", min_value=2020, max_value=date.today().year, value=date.today().year-1, step=1, key="rappel_equipe")
+            annee_rappel = st.number_input("Année de début", min_value=2020, max_value=date.today().year+1, value=date.today().year, step=1, key="rappel_equipe")
             afficher_rappels_reabonnement_whatsapp(annee_rappel, equipe_id=eid)
     
     # Archives

@@ -157,6 +157,35 @@ def supprimer_photo(photo_path):
         # Mode local de secours
         os.remove(photo_path)
 
+def afficher_agenda(equipe_id):
+    """Affiche l'agenda à venir d'une équipe (lecture seule)."""
+    aujourd_hui = date.today()
+    agenda_items = c.execute('''SELECT date_event, type_event, lieu, description 
+                                FROM agenda 
+                                WHERE equipe_id=? AND date_event >= ? 
+                                ORDER BY date_event ASC''', (equipe_id, aujourd_hui)).fetchall()
+    
+    if agenda_items:
+        for item in agenda_items:
+            item_date_raw, item_type, item_lieu, item_desc = item
+            item_date = safe_date(item_date_raw)
+            if not item_date: continue
+            
+            delta = (item_date - aujourd_hui).days
+            if delta == 0: delai_str = "🔴 **Aujourd'hui !**"
+            elif delta == 1: delai_str = "🟠 **Demain**"
+            elif delta <= 7: delai_str = f"🟡 Dans **{delta} jours**"
+            else: delai_str = f"🟢 Dans **{delta} jours**"
+            
+            icone = {"Prière mensuelle": "🧎", "Prière commune": "🙏", "Prière spéciale": "✨", "Pèlerinage": "🚶‍♂️", "Réunion": "🤝", "Autre": "📅"}.get(item_type, "📅")
+            header = f"{icone} {item_date.strftime('%d/%m/%Y')} - {item_type} ({delai_str})"
+            
+            with st.expander(header):
+                if item_lieu: st.write(f"📍 **Lieu :** {item_lieu}")
+                if item_desc: st.write(f"📝 **Détails :** {item_desc}")
+    else:
+        st.info("Aucun événement à venir pour cette équipe.")
+
 # ✅ Widget centralisé pour le choix abonnement/réabonnement
 def widget_type_abonnement(key_prefix, membre_id, annee_debut):
     """Widget pour choisir le type d'abonnement. Retourne (type, montant)."""
@@ -445,6 +474,7 @@ c.execute('''CREATE TABLE IF NOT EXISTS archives (id INTEGER PRIMARY KEY, membre
 c.execute('''CREATE TABLE IF NOT EXISTS evenements (id INTEGER PRIMARY KEY, equipe_id INTEGER, type_evenement TEXT, date_evenement DATE, lieu TEXT)''')
 c.execute('''CREATE TABLE IF NOT EXISTS suivi_presences (id INTEGER PRIMARY KEY, membre_id INTEGER, evenement_id INTEGER, statut TEXT DEFAULT 'absent')''')
 
+c.execute('''CREATE TABLE IF NOT EXISTS agenda (id INTEGER PRIMARY KEY, equipe_id INTEGER, date_event DATE, type_event TEXT, lieu TEXT, description TEXT)''')
 
 commit_and_sync()
 
@@ -1144,6 +1174,11 @@ if st.session_state['role'] == 'diocese':
                 st.info("Aucune équipe dans cette paroisse.")
         else:
             st.info("Aucune paroisse créée.")
+                                
+        # ✅ Ajout de l'agenda
+        st.markdown("---")
+        st.subheader("📅 Agenda - A venir")
+        afficher_agenda(eid_select)
     
     # WhatsApp
     elif menu == "💬 WhatsApp":
@@ -1857,7 +1892,12 @@ elif st.session_state['role'] == 'paroisse':
             afficher_historique_suivi(eid_select, filtre_type)
         else:
             st.info("Aucune équipe créée dans cette paroisse.")
-    
+                        
+        # ✅ Ajout de l'agenda
+        st.markdown("---")
+        st.subheader("📅 Agenda - A venir")
+        afficher_agenda(eid_select)
+        
     # WhatsApp
     elif menu == "WhatsApp":
         st.markdown(f'<h2 style="color:#1A237E;">💬 Communications WhatsApp - {nom_paroisse}</h2>', unsafe_allow_html=True)
@@ -2294,101 +2334,150 @@ elif st.session_state['role'] == 'equipe':
             else:
                 st.success("🎉 Tous les membres sont à jour !")
 
-    # Suivi des présences
+    # Suivi des présences et Agenda
     elif menu == "📌 Suivi":
-        st.markdown(f'<h2 style="color:#1A237E;">📌 Suivi des présences - {nom_equipe}</h2>', unsafe_allow_html=True)
+        st.markdown(f'<h2 style="color:#1A237E;">📌 Suivi et Agenda - {nom_equipe}</h2>', unsafe_allow_html=True)
         
-        types_evenements = ["Prière mensuelle", "Prière commune", "Prière spéciale", "Pèlerinage"]
-        membres_actifs = c.execute("SELECT id, nom, prenom FROM membres WHERE equipe_id=? AND statut='actif' ORDER BY nom", (eid,)).fetchall()
+        tab_passe, tab_avenir = st.tabs(["📝 Séances réalisées", "📅 Agenda - A venir"])
         
-        if not membres_actifs:
-            st.warning("Aucun membre actif dans l'équipe pour le moment.")
-        else:
-            # --- Section d'enregistrement ---
-            with st.expander("📝 Enregistrer / Modifier une séance", expanded=True):
-                # Les sélecteurs sont hors du formulaire pour le rechargement dynamique
-                col_sel1, col_sel2, col_sel3 = st.columns(3)
-                with col_sel1:
-                    date_event = st.date_input("📅 Date de l'événement", value=date.today(), key="date_suivi_eq")
-                with col_sel2:
-                    type_event = st.selectbox("⛪ Type d'événement", types_evenements, key="type_suivi_eq")
-                with col_sel3:
-                    lieu_event = st.text_input("📍 Lieu de la rencontre", key="lieu_suivi_eq")
-                
-                # Vérifier si l'événement existe déjà pour pré-remplir
-                event = c.execute("SELECT id, lieu FROM evenements WHERE equipe_id=? AND date_evenement=? AND type_evenement=?", 
-                                  (eid, date_event, type_event)).fetchone()
-                
-                event_id = None
-                if event:
-                    event_id = event[0]
-                    if not lieu_event and event[1]:
-                        st.info(f"📍 Lieu enregistré précédemment : {event[1]}")
-                
-                with st.form("form_suivi_presences"):
-                    st.markdown(f"**Statut des membres pour le {date_event.strftime('%d/%m/%Y')} ({type_event}) :**")
+        # ==========================================
+        # ONGLET 1 : SÉANCES RÉALISÉES (Ancien code)
+        # ==========================================
+        with tab_passe:
+            types_evenements = ["Prière mensuelle", "Prière commune", "Prière spéciale", "Pèlerinage"]
+            membres_actifs = c.execute("SELECT id, nom, prenom FROM membres WHERE equipe_id=? AND statut='actif' ORDER BY nom", (eid,)).fetchall()
+            
+            if not membres_actifs:
+                st.warning("Aucun membre actif dans l'équipe pour le moment.")
+            else:
+                with st.expander("📝 Enregistrer / Modifier une séance", expanded=False):
+                    col_sel1, col_sel2, col_sel3 = st.columns(3)
+                    with col_sel1:
+                        date_event = st.date_input("📅 Date de l'événement", value=date.today(), key="date_suivi_eq")
+                    with col_sel2:
+                        type_event = st.selectbox("⛪ Type d'événement", types_evenements, key="type_suivi_eq")
+                    with col_sel3:
+                        lieu_event = st.text_input("📍 Lieu de la rencontre", key="lieu_suivi_eq")
                     
-                    statuts = {}
-                    for m in membres_actifs:
-                        if event_id:
-                            existing = c.execute('''SELECT statut FROM suivi_presences 
-                                                    WHERE membre_id=? AND evenement_id=?''', 
-                                                 (m[0], event_id)).fetchone()
-                            default_statut = existing[0] if existing else "absent"
-                        else:
-                            default_statut = "absent"
-                        
-                        # Utilisation de radio pour 3 choix : Présent, Excusé, Absent
-                        statuts[m[0]] = st.radio(
-                            f"{m[1]} {m[2]}", 
-                            ["present", "excuse", "absent"], 
-                            format_func=lambda x: {"present": "✅ Présent", "excuse": "⚠️ Excusé", "absent": "❌ Absent"}[x],
-                            index=["present", "excuse", "absent"].index(default_statut),
-                            key=f"radio_{m[0]}_{date_event}_{type_event}",
-                            horizontal=True
-                        )
+                    event = c.execute("SELECT id, lieu FROM evenements WHERE equipe_id=? AND date_evenement=? AND type_evenement=?", 
+                                      (eid, date_event, type_event)).fetchone()
+                    event_id = None
+                    if event:
+                        event_id = event[0]
+                        if not lieu_event and event[1]:
+                            st.info(f"📍 Lieu enregistré précédemment : {event[1]}")
                     
-                    col_btn1, col_btn2 = st.columns(2)
-                    with col_btn1:
-                        submitted = st.form_submit_button("💾 Enregistrer les présences", use_container_width=True)
-                    with col_btn2:
-                        clear = st.form_submit_button("🗑️ Effacer cette séance", use_container_width=True)
-                    
-                    if submitted:
-                        # 1. Créer ou mettre à jour l'événement
-                        if event_id:
-                            c.execute("UPDATE evenements SET lieu=? WHERE id=?", (lieu_event, event_id))
-                        else:
-                            c.execute("INSERT INTO evenements (equipe_id, type_evenement, date_evenement, lieu) VALUES (?, ?, ?, ?)",
-                                      (eid, type_event, date_event, lieu_event))
-                            event_id = c.lastrowid
+                    with st.form("form_suivi_presences"):
+                        st.markdown(f"**Statut des membres pour le {date_event.strftime('%d/%m/%Y')} ({type_event}) :**")
+                        statuts = {}
+                        for m in membres_actifs:
+                            if event_id:
+                                existing = c.execute('''SELECT statut FROM suivi_presences WHERE membre_id=? AND evenement_id=?''', (m[0], event_id)).fetchone()
+                                default_statut = existing[0] if existing else "absent"
+                            else:
+                                default_statut = "absent"
+                            statuts[m[0]] = st.radio(
+                                f"{m[1]} {m[2]}", 
+                                ["present", "excuse", "absent"], 
+                                format_func=lambda x: {"present": "✅ Présent", "excuse": "⚠️ Excusé", "absent": "❌ Absent"}[x],
+                                index=["present", "excuse", "absent"].index(default_statut),
+                                key=f"radio_{m[0]}_{date_event}_{type_event}",
+                                horizontal=True
+                            )
                         
-                        # 2. Supprimer les anciens enregistrements
-                        c.execute("DELETE FROM suivi_presences WHERE evenement_id=?", (event_id,))
+                        col_btn1, col_btn2 = st.columns(2)
+                        with col_btn1:
+                            submitted = st.form_submit_button("💾 Enregistrer les présences", use_container_width=True)
+                        with col_btn2:
+                            clear = st.form_submit_button("🗑️ Effacer cette séance", use_container_width=True)
                         
-                        # 3. Insérer les nouveaux statuts
-                        for m_id, statut in statuts.items():
-                            c.execute("INSERT INTO suivi_presences (membre_id, evenement_id, statut) VALUES (?, ?, ?)",
-                                      (m_id, event_id, statut))
-                        commit_and_sync()
-                        st.success("Présences enregistrées avec succès ! ✅")
-                        st.rerun()
-
-                    if clear:
-                        if event_id:
+                        if submitted:
+                            if event_id:
+                                c.execute("UPDATE evenements SET lieu=? WHERE id=?", (lieu_event, event_id))
+                            else:
+                                c.execute("INSERT INTO evenements (equipe_id, type_evenement, date_evenement, lieu) VALUES (?, ?, ?, ?)", (eid, type_event, date_event, lieu_event))
+                                event_id = c.lastrowid
                             c.execute("DELETE FROM suivi_presences WHERE evenement_id=?", (event_id,))
-                            c.execute("DELETE FROM evenements WHERE id=?", (event_id,))
+                            for m_id, statut in statuts.items():
+                                c.execute("INSERT INTO suivi_presences (membre_id, evenement_id, statut) VALUES (?, ?, ?)", (m_id, event_id, statut))
                             commit_and_sync()
-                            st.warning("Séance effacée.")
+                            st.success("Présences enregistrées avec succès ! ✅")
                             st.rerun()
-                        else:
-                            st.info("Aucune séance à effacer pour cette date et ce type.")
 
-            # --- Section Historique ---
+                        if clear:
+                            if event_id:
+                                c.execute("DELETE FROM suivi_presences WHERE evenement_id=?", (event_id,))
+                                c.execute("DELETE FROM evenements WHERE id=?", (event_id,))
+                                commit_and_sync()
+                                st.warning("Séance effacée.")
+                                st.rerun()
+
             st.markdown("---")
             st.subheader("📊 Historique et Statistiques")
-            filtre_type = st.selectbox("Filtrer par type d'événement", ["Tous"] + types_evenements, key="filtre_hist_eq")
-            afficher_historique_suivi(eid, filtre_type)    
+            filtre_type = st.selectbox("Filtrer par type d'événement", ["Tous"] + ["Prière mensuelle", "Prière commune", "Prière spéciale", "Pèlerinage"], key="filtre_hist_eq")
+            afficher_historique_suivi(eid, filtre_type)
+
+        # ==========================================
+        # ONGLET 2 : AGENDA - A VENIR (Nouveau)
+        # ==========================================
+        with tab_avenir:
+            st.subheader("📅 Prochains événements")
+            
+            with st.expander("➕ Ajouter un événement à l'agenda"):
+                with st.form("ajout_agenda_eq"):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        date_agenda = st.date_input("📅 Date de l'événement", value=date.today() + timedelta(days=7), min_value=date.today(), key="date_agenda_eq")
+                    with col2:
+                        type_agenda = st.selectbox("⛪ Type", ["Prière mensuelle", "Prière commune", "Prière spéciale", "Pèlerinage", "Réunion", "Autre"], key="type_agenda_eq")
+                    lieu_agenda = st.text_input("📍 Lieu", key="lieu_agenda_eq")
+                    desc_agenda = st.text_area("📝 Description / Notes (optionnel)", key="desc_agenda_eq")
+                    
+                    if st.form_submit_button("📅 Ajouter à l'agenda", use_container_width=True):
+                        c.execute("INSERT INTO agenda (equipe_id, date_event, type_event, lieu, description) VALUES (?, ?, ?, ?, ?)",
+                                  (eid, date_agenda, type_agenda, lieu_agenda, desc_agenda))
+                        commit_and_sync()
+                        st.success("Événement ajouté à l'agenda ! ✅")
+                        st.rerun()
+
+            # Affichage des événements à venir
+            aujourd_hui = date.today()
+            agenda_items = c.execute('''SELECT id, date_event, type_event, lieu, description 
+                                        FROM agenda 
+                                        WHERE equipe_id=? AND date_event >= ? 
+                                        ORDER BY date_event ASC''', (eid, aujourd_hui)).fetchall()
+            
+            if agenda_items:
+                for item in agenda_items:
+                    item_id, item_date_raw, item_type, item_lieu, item_desc = item
+                    item_date = safe_date(item_date_raw)
+                    if not item_date: continue
+                    
+                    # Calcul du temps restant avec code couleur
+                    delta = (item_date - aujourd_hui).days
+                    if delta == 0:
+                        delai_str = "🔴 **Aujourd'hui !**"
+                    elif delta == 1:
+                        delai_str = "🟠 **Demain**"
+                    elif delta <= 7:
+                        delai_str = f"🟡 Dans **{delta} jours**"
+                    else:
+                        delai_str = f"🟢 Dans **{delta} jours**"
+                    
+                    icone = {"Prière mensuelle": "🧎", "Prière commune": "🙏", "Prière spéciale": "✨", "Pèlerinage": "🚶‍♂️", "Réunion": "🤝", "Autre": "📅"}.get(item_type, "📅")
+                    header = f"{icone} {item_date.strftime('%d/%m/%Y')} - {item_type} ({delai_str})"
+                    
+                    with st.expander(header):
+                        if item_lieu:
+                            st.write(f"📍 **Lieu :** {item_lieu}")
+                        if item_desc:
+                            st.write(f"📝 **Détails :** {item_desc}")
+                        if st.button("🗑️ Supprimer de l'agenda", key=f"del_agenda_{item_id}"):
+                            c.execute("DELETE FROM agenda WHERE id=?", (item_id,))
+                            commit_and_sync()
+                            st.rerun()
+            else:
+                st.info("Aucun événement à venir. Ajoutez-en un ci-dessus !")    
     
     # WhatsApp
     elif menu == "WhatsApp":

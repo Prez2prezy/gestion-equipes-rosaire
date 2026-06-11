@@ -156,12 +156,10 @@ def supprimer_photo(photo_path):
     elif not photo_path.startswith("http") and os.path.exists(photo_path):
         # Mode local de secours
         os.remove(photo_path)
-
-def afficher_et_gerer_agenda(equipe_id=None, paroisse_id=None, diocese_id=None):
-    """Affiche l'agenda et permet d'ajouter/supprimer des événements."""
-    st.subheader("📅 Prochains événements")
+def afficher_et_gerer_agenda(equipe_id=None, paroisse_id=None, diocese_id=None, auteur_nom="Système"):
+    """Affiche l'agenda, permet d'ajouter/supprimer des événements et affiche l'auteur."""
+    st.subheader("📅 Vos événements à venir")
     
-    # Déterminer le préfixe pour les clés Streamlit uniques
     prefix = f"ag_{equipe_id}_{paroisse_id}_{diocese_id}"
     
     with st.expander("➕ Ajouter un événement à l'agenda"):
@@ -175,16 +173,16 @@ def afficher_et_gerer_agenda(equipe_id=None, paroisse_id=None, diocese_id=None):
             desc_agenda = st.text_area("📝 Description / Notes (optionnel)", key=f"desc_ag_{prefix}")
             
             if st.form_submit_button("📅 Ajouter à l'agenda", use_container_width=True):
-                c.execute('''INSERT INTO agenda (equipe_id, paroisse_id, diocese_id, date_event, type_event, lieu, description) 
-                             VALUES (?, ?, ?, ?, ?, ?, ?)''',
-                          (equipe_id, paroisse_id, diocese_id, date_agenda, type_agenda, lieu_agenda, desc_agenda))
+                c.execute('''INSERT INTO agenda (equipe_id, paroisse_id, diocese_id, date_event, type_event, lieu, description, auteur_nom) 
+                             VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                          (equipe_id, paroisse_id, diocese_id, date_agenda, type_agenda, lieu_agenda, desc_agenda, auteur_nom))
                 commit_and_sync()
                 st.success("Événement ajouté à l'agenda ! ✅")
                 st.rerun()
 
-    # Affichage des événements à venir
+    # Affichage des événements à venir de l'entité courante
     aujourd_hui = date.today()
-    query = '''SELECT id, date_event, type_event, lieu, description 
+    query = '''SELECT id, date_event, type_event, lieu, description, auteur_nom 
                FROM agenda 
                WHERE date_event >= ? '''
     params = [aujourd_hui]
@@ -193,10 +191,10 @@ def afficher_et_gerer_agenda(equipe_id=None, paroisse_id=None, diocese_id=None):
         query += " AND equipe_id=?"
         params.append(equipe_id)
     elif paroisse_id:
-        query += " AND paroisse_id=? AND equipe_id IS NULL" # Événements de paroisse générale
+        query += " AND paroisse_id=? AND equipe_id IS NULL"
         params.append(paroisse_id)
     elif diocese_id:
-        query += " AND diocese_id=? AND paroisse_id IS NULL AND equipe_id IS NULL" # Événements de diocèse général
+        query += " AND diocese_id=? AND paroisse_id IS NULL AND equipe_id IS NULL"
         params.append(diocese_id)
         
     query += " ORDER BY date_event ASC"
@@ -204,7 +202,7 @@ def afficher_et_gerer_agenda(equipe_id=None, paroisse_id=None, diocese_id=None):
     
     if agenda_items:
         for item in agenda_items:
-            item_id, item_date_raw, item_type, item_lieu, item_desc = item
+            item_id, item_date_raw, item_type, item_lieu, item_desc, item_auteur = item
             item_date = safe_date(item_date_raw)
             if not item_date: continue
             
@@ -218,14 +216,74 @@ def afficher_et_gerer_agenda(equipe_id=None, paroisse_id=None, diocese_id=None):
             header = f"{icone} {item_date.strftime('%d/%m/%Y')} - {item_type} ({delai_str})"
             
             with st.expander(header):
-                if item_lieu: st.write(f"📍 **Lieu :** {item_lieu}")
-                if item_desc: st.write(f"📝 **Détails :** {item_desc}")
+                # ✅ Affichage de l'auteur
+                if item_auteur:
+                    st.write(f"👤 **Ajouté par :** {item_auteur}")
+                if item_lieu:
+                    st.write(f"📍 **Lieu :** {item_lieu}")
+                if item_desc:
+                    st.write(f"📝 **Détails :** {item_desc}")
                 if st.button("🗑️ Supprimer de l'agenda", key=f"del_agenda_{item_id}_{prefix}"):
                     c.execute("DELETE FROM agenda WHERE id=?", (item_id,))
                     commit_and_sync()
                     st.rerun()
     else:
-        st.info("Aucun événement à venir. Ajoutez-en un ci-dessus !")
+        st.info("Aucun événement à venir.")
+
+def afficher_agenda_complet(paroisse_id=None, diocese_id=None):
+    """Affiche l'agenda complet des niveaux inférieurs."""
+    st.subheader("📋 Planification des agendas (Vue d'ensemble)")
+    
+    aujourd_hui = date.today()
+    query = '''SELECT a.date_event, a.type_event, a.lieu, a.description, a.auteur_nom,
+                      e.nom_equipe, p.nom as nom_paroisse
+               FROM agenda a
+               LEFT JOIN equipes e ON a.equipe_id = e.id
+               LEFT JOIN paroisses p ON a.paroisse_id = p.id
+               WHERE a.date_event >= ? '''
+    params = [aujourd_hui]
+    
+    if paroisse_id:
+        # Toutes les équipes de cette paroisse
+        query += " AND a.paroisse_id=? AND a.equipe_id IS NOT NULL"
+        params.append(paroisse_id)
+    elif diocese_id:
+        # Toutes les paroisses et équipes du diocèse
+        query += " AND a.diocese_id=? AND (a.paroisse_id IS NOT NULL OR a.equipe_id IS NOT NULL)"
+        params.append(diocese_id)
+        
+    query += " ORDER BY a.date_event ASC"
+    agenda_items = c.execute(query, params).fetchall()
+    
+    if agenda_items:
+        for item in agenda_items:
+            item_date_raw, item_type, item_lieu, item_desc, item_auteur, item_eq, item_par = item
+            item_date = safe_date(item_date_raw)
+            if not item_date: continue
+            
+            # Déterminer la source de l'événement
+            source = ""
+            if item_eq:
+                source = f"👥 {item_eq} ({item_par})"
+            elif item_par:
+                source = f"🏘️ {item_par}"
+            
+            delta = (item_date - aujourd_hui).days
+            if delta == 0: delai_str = "🔴 Aujourd'hui !"
+            elif delta == 1: delai_str = "🟠 Demain"
+            elif delta <= 7: delai_str = f"🟡 Dans {delta} jours"
+            else: delai_str = f"🟢 Dans {delta} jours"
+            
+            icone = {"Prière mensuelle": "🧎", "Prière commune": "🙏", "Prière spéciale": "✨", "Pèlerinage": "🚶‍♂️", "Réunion": "🤝", "Autre": "📅"}.get(item_type, "📅")
+            header = f"{icone} {item_date.strftime('%d/%m/%Y')} - {item_type} - {source} ({delai_str})"
+            
+            with st.expander(header):
+                if source: st.write(f"🏢 **Source :** {source}")
+                if item_auteur: st.write(f"👤 **Ajouté par :** {item_auteur}")
+                if item_lieu: st.write(f"📍 **Lieu :** {item_lieu}")
+                if item_desc: st.write(f"📝 **Détails :** {item_desc}")
+    else:
+        st.info("Aucun événement prévu par les niveaux inférieurs.")
 
 def afficher_agenda(equipe_id):
     """Affiche l'agenda à venir d'une équipe (lecture seule)."""
@@ -605,6 +663,11 @@ try:
 except: pass
 try:
     c.execute("ALTER TABLE agenda ADD COLUMN diocese_id INTEGER")
+    conn.commit()
+except: pass
+
+try:
+    c.execute("ALTER TABLE agenda ADD COLUMN auteur_nom TEXT")
     conn.commit()
 except: pass
 
@@ -1233,31 +1296,14 @@ if st.session_state['role'] == 'diocese':
     # Suivi consultatif Diocèse
     elif menu == "📌 Suivi":
         st.markdown('<h2 style="color:#1A237E;">📌 Suivi et Agenda - Diocèse</h2>', unsafe_allow_html=True)
-        
         tab_avenir, tab_passe = st.tabs(["📅 Agenda - A venir", "📝 Séances réalisées"])
         
         with tab_avenir:
-            # Agenda du Diocèse global
-            afficher_et_gerer_agenda(diocese_id=1)
+            # 1. Agenda du diocèse
+            afficher_et_gerer_agenda(diocese_id=1, auteur_nom=st.session_state['username'])
             
-            st.markdown("---")
-            st.subheader("🏘️ Agenda des paroisses et équipes")
-            paroisses = c.execute("SELECT id, nom FROM paroisses").fetchall()
-            if paroisses:
-                par_dict = {p[1]: p[0] for p in paroisses}
-                choix_par = st.selectbox("Sélectionnez une paroisse", list(par_dict.keys()), key="suivi_agenda_dio_par")
-                pid_select = par_dict[choix_par]
-                
-                # Agenda Paroissial
-                afficher_et_gerer_agenda(paroisse_id=pid_select)
-                
-                # Agenda des équipes de la paroisse
-                equipes = c.execute("SELECT id, nom_equipe FROM equipes WHERE paroisse_id=?", (pid_select,)).fetchall()
-                if equipes:
-                    eq_dict = {eq[1]: eq[0] for eq in equipes}
-                    choix_eq = st.selectbox("Voir l'agenda d'une équipe", list(eq_dict.keys()), key="suivi_agenda_dio_eq")
-                    eid_select = eq_dict[choix_eq]
-                    afficher_et_gerer_agenda(equipe_id=eid_select)
+            # 2. Vue globale de tout le diocèse
+            afficher_agenda_complet(diocese_id=1)
 
         with tab_passe:
             st.subheader("📊 Historique des présences (Lecture seule)")
@@ -1274,13 +1320,12 @@ if st.session_state['role'] == 'diocese':
                     eid_select = eq_dict[choix_eq]
                     
                     types_evenements = ["Tous", "Prière mensuelle", "Prière commune", "Prière spéciale", "Pèlerinage"]
-                    filtre_type = st.selectbox("Filtrer par type d'événement", types_evenements, key="filtre_hist_dio")
-                    
+                    filtre_type = st.selectbox("Filtrer par type", types_evenements, key="filtre_hist_dio")
                     afficher_historique_suivi(eid_select, filtre_type)
                 else:
                     st.info("Aucune équipe dans cette paroisse.")
             else:
-                st.info("Aucune paroisse créée.")    
+                st.info("Aucune paroisse créée.")
 
     # WhatsApp
     elif menu == "💬 WhatsApp":
@@ -1982,23 +2027,14 @@ elif st.session_state['role'] == 'paroisse':
     # Suivi consultatif Paroisse
     elif menu == "📌 Suivi":
         st.markdown(f'<h2 style="color:#1A237E;">📌 Suivi et Agenda - {nom_paroisse}</h2>', unsafe_allow_html=True)
-        
         tab_avenir, tab_passe = st.tabs(["📅 Agenda - A venir", "📝 Séances réalisées"])
         
         with tab_avenir:
-            # Agenda de la paroisse globale
-            afficher_et_gerer_agenda(paroisse_id=pid)
+            # 1. Agenda de la paroisse
+            afficher_et_gerer_agenda(paroisse_id=pid, auteur_nom=st.session_state['username'])
             
-            st.markdown("---")
-            st.subheader("👥 Agenda des équipes")
-            equipes = c.execute("SELECT id, nom_equipe FROM equipes WHERE paroisse_id=?", (pid,)).fetchall()
-            if equipes:
-                eq_dict = {eq[1]: eq[0] for eq in equipes}
-                choix_eq = st.selectbox("Voir l'agenda d'une équipe", list(eq_dict.keys()), key="suivi_agenda_par_eq")
-                eid_select = eq_dict[choix_eq]
-                afficher_et_gerer_agenda(equipe_id=eid_select)
-            else:
-                st.info("Aucune équipe créée dans cette paroisse.")
+            # 2. Vue globale des équipes de la paroisse
+            afficher_agenda_complet(paroisse_id=pid)
 
         with tab_passe:
             st.subheader("📊 Historique des présences (Lecture seule)")
@@ -2009,12 +2045,11 @@ elif st.session_state['role'] == 'paroisse':
                 eid_select = eq_dict[choix_eq]
                 
                 types_evenements = ["Tous", "Prière mensuelle", "Prière commune", "Prière spéciale", "Pèlerinage"]
-                filtre_type = st.selectbox("Filtrer par type d'événement", types_evenements, key="filtre_hist_par")
-                
+                filtre_type = st.selectbox("Filtrer par type", types_evenements, key="filtre_hist_par")
                 afficher_historique_suivi(eid_select, filtre_type)
             else:
-                st.info("Aucune équipe créée dans cette paroisse.")        
-    
+                st.info("Aucune équipe créée.")
+
     # WhatsApp
     elif menu == "WhatsApp":
         st.markdown(f'<h2 style="color:#1A237E;">💬 Communications WhatsApp - {nom_paroisse}</h2>', unsafe_allow_html=True)
@@ -2454,81 +2489,19 @@ elif st.session_state['role'] == 'equipe':
     # Suivi des présences et Agenda
     elif menu == "📌 Suivi":
         st.markdown(f'<h2 style="color:#1A237E;">📌 Suivi et Agenda - {nom_equipe}</h2>', unsafe_allow_html=True)
+        tab_avenir, tab_passe = st.tabs(["📅 Agenda - A venir", "📝 Séances réalisées"])
         
-        tab_passe, tab_avenir = st.tabs(["📝 Séances réalisées", "📅 Agenda - A venir"])
-        # ==========================================
-        # ONGLET 1 : AGENDA - A VENIR (Nouveau)
-        # ==========================================
         with tab_avenir:
-            st.subheader("📅 Prochains événements")
-            
-            with st.expander("➕ Ajouter un événement à l'agenda"):
-                with st.form("ajout_agenda_eq"):
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        date_agenda = st.date_input("📅 Date de l'événement", value=date.today() + timedelta(days=7), min_value=date.today(), key="date_agenda_eq")
-                    with col2:
-                        type_agenda = st.selectbox("⛪ Type", ["Prière mensuelle", "Prière commune", "Prière spéciale", "Pèlerinage", "Réunion", "Autre"], key="type_agenda_eq")
-                    lieu_agenda = st.text_input("📍 Lieu", key="lieu_agenda_eq")
-                    desc_agenda = st.text_area("📝 Description / Notes (optionnel)", key="desc_agenda_eq")
-                    
-                    if st.form_submit_button("📅 Ajouter à l'agenda", use_container_width=True):
-                        c.execute("INSERT INTO agenda (equipe_id, date_event, type_event, lieu, description) VALUES (?, ?, ?, ?, ?)",
-                                  (eid, date_agenda, type_agenda, lieu_agenda, desc_agenda))
-                        commit_and_sync()
-                        st.success("Événement ajouté à l'agenda ! ✅")
-                        st.rerun()
+            afficher_et_gerer_agenda(equipe_id=eid, auteur_nom=st.session_state['username'])
 
-            # Affichage des événements à venir
-            aujourd_hui = date.today()
-            agenda_items = c.execute('''SELECT id, date_event, type_event, lieu, description 
-                                        FROM agenda 
-                                        WHERE equipe_id=? AND date_event >= ? 
-                                        ORDER BY date_event ASC''', (eid, aujourd_hui)).fetchall()
-            
-            if agenda_items:
-                for item in agenda_items:
-                    item_id, item_date_raw, item_type, item_lieu, item_desc = item
-                    item_date = safe_date(item_date_raw)
-                    if not item_date: continue
-                    
-                    # Calcul du temps restant avec code couleur
-                    delta = (item_date - aujourd_hui).days
-                    if delta == 0:
-                        delai_str = "🔴 **Aujourd'hui !**"
-                    elif delta == 1:
-                        delai_str = "🟠 **Demain**"
-                    elif delta <= 7:
-                        delai_str = f"🟡 Dans **{delta} jours**"
-                    else:
-                        delai_str = f"🟢 Dans **{delta} jours**"
-                    
-                    icone = {"Prière mensuelle": "🧎", "Prière commune": "🙏", "Prière spéciale": "✨", "Pèlerinage": "🚶‍♂️", "Réunion": "🤝", "Autre": "📅"}.get(item_type, "📅")
-                    header = f"{icone} {item_date.strftime('%d/%m/%Y')} - {item_type} ({delai_str})"
-                    
-                    with st.expander(header):
-                        if item_lieu:
-                            st.write(f"📍 **Lieu :** {item_lieu}")
-                        if item_desc:
-                            st.write(f"📝 **Détails :** {item_desc}")
-                        if st.button("🗑️ Supprimer de l'agenda", key=f"del_agenda_{item_id}"):
-                            c.execute("DELETE FROM agenda WHERE id=?", (item_id,))
-                            commit_and_sync()
-                            st.rerun()
-            else:
-                st.info("Aucun événement à venir. Ajoutez-en un ci-dessus !")    
-    
-        # ==========================================
-        # ONGLET 2 : SÉANCES RÉALISÉES (Ancien code)
-        # ==========================================
         with tab_passe:
             types_evenements = ["Prière mensuelle", "Prière commune", "Prière spéciale", "Pèlerinage"]
             membres_actifs = c.execute("SELECT id, nom, prenom FROM membres WHERE equipe_id=? AND statut='actif' ORDER BY nom", (eid,)).fetchall()
-            
             if not membres_actifs:
                 st.warning("Aucun membre actif dans l'équipe pour le moment.")
             else:
                 with st.expander("📝 Enregistrer / Modifier une séance", expanded=False):
+                    # ... (Gardez tout votre code existant du formulaire de présence ici, sans rien changer)
                     col_sel1, col_sel2, col_sel3 = st.columns(3)
                     with col_sel1:
                         date_event = st.date_input("📅 Date de l'événement", value=date.today(), key="date_suivi_eq")
@@ -2594,6 +2567,68 @@ elif st.session_state['role'] == 'equipe':
             st.subheader("📊 Historique et Statistiques")
             filtre_type = st.selectbox("Filtrer par type d'événement", ["Tous"] + ["Prière mensuelle", "Prière commune", "Prière spéciale", "Pèlerinage"], key="filtre_hist_eq")
             afficher_historique_suivi(eid, filtre_type)
+
+        # ==========================================
+        # ONGLET 2 : AGENDA - A VENIR (Nouveau)
+        # ==========================================
+        with tab_avenir:
+            st.subheader("📅 Prochains événements")
+            
+            with st.expander("➕ Ajouter un événement à l'agenda"):
+                with st.form("ajout_agenda_eq"):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        date_agenda = st.date_input("📅 Date de l'événement", value=date.today() + timedelta(days=7), min_value=date.today(), key="date_agenda_eq")
+                    with col2:
+                        type_agenda = st.selectbox("⛪ Type", ["Prière mensuelle", "Prière commune", "Prière spéciale", "Pèlerinage", "Réunion", "Autre"], key="type_agenda_eq")
+                    lieu_agenda = st.text_input("📍 Lieu", key="lieu_agenda_eq")
+                    desc_agenda = st.text_area("📝 Description / Notes (optionnel)", key="desc_agenda_eq")
+                    
+                    if st.form_submit_button("📅 Ajouter à l'agenda", use_container_width=True):
+                        c.execute("INSERT INTO agenda (equipe_id, date_event, type_event, lieu, description) VALUES (?, ?, ?, ?, ?)",
+                                  (eid, date_agenda, type_agenda, lieu_agenda, desc_agenda))
+                        commit_and_sync()
+                        st.success("Événement ajouté à l'agenda ! ✅")
+                        st.rerun()
+
+            # Affichage des événements à venir
+            aujourd_hui = date.today()
+            agenda_items = c.execute('''SELECT id, date_event, type_event, lieu, description 
+                                        FROM agenda 
+                                        WHERE equipe_id=? AND date_event >= ? 
+                                        ORDER BY date_event ASC''', (eid, aujourd_hui)).fetchall()
+            
+            if agenda_items:
+                for item in agenda_items:
+                    item_id, item_date_raw, item_type, item_lieu, item_desc = item
+                    item_date = safe_date(item_date_raw)
+                    if not item_date: continue
+                    
+                    # Calcul du temps restant avec code couleur
+                    delta = (item_date - aujourd_hui).days
+                    if delta == 0:
+                        delai_str = "🔴 **Aujourd'hui !**"
+                    elif delta == 1:
+                        delai_str = "🟠 **Demain**"
+                    elif delta <= 7:
+                        delai_str = f"🟡 Dans **{delta} jours**"
+                    else:
+                        delai_str = f"🟢 Dans **{delta} jours**"
+                    
+                    icone = {"Prière mensuelle": "🧎", "Prière commune": "🙏", "Prière spéciale": "✨", "Pèlerinage": "🚶‍♂️", "Réunion": "🤝", "Autre": "📅"}.get(item_type, "📅")
+                    header = f"{icone} {item_date.strftime('%d/%m/%Y')} - {item_type} ({delai_str})"
+                    
+                    with st.expander(header):
+                        if item_lieu:
+                            st.write(f"📍 **Lieu :** {item_lieu}")
+                        if item_desc:
+                            st.write(f"📝 **Détails :** {item_desc}")
+                        if st.button("🗑️ Supprimer de l'agenda", key=f"del_agenda_{item_id}"):
+                            c.execute("DELETE FROM agenda WHERE id=?", (item_id,))
+                            commit_and_sync()
+                            st.rerun()
+            else:
+                st.info("Aucun événement à venir. Ajoutez-en un ci-dessus !")    
 
     # WhatsApp
     elif menu == "WhatsApp":
@@ -2708,4 +2743,3 @@ elif st.session_state['role'] == 'equipe':
                                 st.info("Un défunt ne peut pas être réintégré.")
         else:
             st.info("Aucune archive pour cette équipe.")
-            

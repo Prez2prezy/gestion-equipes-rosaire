@@ -118,9 +118,6 @@ def sans_accents(texte):
         texte = texte.replace(accent, lettre)
     return texte
 
-
-
-
 def sauvegarder_photo(photo_fichier, matricule):
     if photo_fichier is not None:
         if USE_CLOUDINARY:
@@ -159,6 +156,16 @@ def supprimer_photo(photo_path):
     elif not photo_path.startswith("http") and os.path.exists(photo_path):
         # Mode local de secours
         os.remove(photo_path)
+
+# ✅ Widget centralisé pour le choix abonnement/réabonnement
+def widget_type_abonnement(key_prefix, membre_id, annee_debut):
+    """Widget pour choisir le type d'abonnement. Retourne (type, montant)."""
+    type_abo = st.radio("Type", ["📝 Abonnement", "🔄 Réabonnement"],
+                        key=f"type_{key_prefix}_{membre_id}_{annee_debut}", horizontal=True)
+    montant = st.number_input("Montant (FCFA)", min_value=0, value=1000, step=500,
+                              key=f"mont_{key_prefix}_{membre_id}_{annee_debut}")
+    type_str = "abonnement" if "Abonnement" in type_abo else "reabonnement"
+    return type_str, montant
 
 def safe_date(value):
     """Convertit une valeur en objet date de façon robuste."""
@@ -2490,3 +2497,4 @@ elif st.session_state['role'] == 'equipe':
                                 st.info("Un défunt ne peut pas être réintégré.")
         else:
             st.info("Aucune archive pour cette équipe.")
+            

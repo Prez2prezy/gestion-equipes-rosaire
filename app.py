@@ -182,71 +182,75 @@ def ajouter_evenement_agenda(equipe_id=None, paroisse_id=None, diocese_id=None, 
                 st.success("Événement enregistré avec succès ! ✅")
                 st.rerun()
 
+
 def afficher_agenda_complet_universel(equipe_id=None, paroisse_id=None, diocese_id=None):
     """Affiche l'agenda global en fonction du niveau hiérarchique de l'utilisateur."""
     st.subheader("📋 Planification des agendas (Vue d'ensemble)")
     
     aujourd_hui = date.today()
-    query = '''SELECT a.id, a.date_event, a.type_event, a.lieu, a.description, a.auteur_nom,
-                      a.equipe_id, a.paroisse_id, a.diocese_id,
-                      e.nom_equipe, 
-                      CASE 
-                        WHEN a.equipe_id IS NOT NULL THEN (SELECT nom FROM paroisses WHERE id = e.paroisse_id)
-                        WHEN a.paroisse_id IS NOT NULL THEN (SELECT nom FROM paroisses WHERE id = a.paroisse_id)
-                        ELSE ''
-                      END as nom_paroisse
-               FROM agenda a
-               LEFT JOIN equipes e ON a.equipe_id = e.id
-               WHERE a.date_event >= ? '''
+    query = '''SELECT id, date_event, type_event, lieu, description, auteur_nom,
+                      equipe_id, paroisse_id, diocese_id
+               FROM agenda 
+               WHERE date_event >= ? '''
     params = [aujourd_hui]
     
-    # Construction de la requête pour voir les enfants et les parents
+    # Construction des conditions pour voir les enfants et les parents
     conditions = []
     if equipe_id:
         # 1. Les événements de l'équipe elle-même
-        conditions.append("a.equipe_id = ?")
+        conditions.append("equipe_id = ?")
         params.append(equipe_id)
         # 2. Les événements de sa paroisse parente
         pid = c.execute("SELECT paroisse_id FROM equipes WHERE id=?", (equipe_id,)).fetchone()
-        if pid:
-            conditions.append("(a.paroisse_id = ? AND a.equipe_id IS NULL)")
+        if pid and pid[0]:
+            conditions.append("(paroisse_id = ? AND equipe_id IS NULL)")
             params.append(pid[0])
         # 3. Les événements du diocèse
-        conditions.append("(a.diocese_id = 1 AND a.paroisse_id IS NULL AND a.equipe_id IS NULL)")
+        conditions.append("(diocese_id = 1 AND paroisse_id IS NULL AND equipe_id IS NULL)")
         
     elif paroisse_id:
         # 1. Les événements de la paroisse elle-même
-        conditions.append("(a.paroisse_id = ? AND a.equipe_id IS NULL)")
+        conditions.append("(paroisse_id = ? AND equipe_id IS NULL)")
         params.append(paroisse_id)
         # 2. Les événements de ses équipes enfants
-        conditions.append("a.equipe_id IN (SELECT id FROM equipes WHERE paroisse_id = ?)")
+        conditions.append("equipe_id IN (SELECT id FROM equipes WHERE paroisse_id = ?)")
         params.append(paroisse_id)
         # 3. Les événements du diocèse
-        conditions.append("(a.diocese_id = 1 AND a.paroisse_id IS NULL AND a.equipe_id IS NULL)")
+        conditions.append("(diocese_id = 1 AND paroisse_id IS NULL AND equipe_id IS NULL)")
         
     elif diocese_id:
         # Le diocèse voit tout ce qui lui appartient
-        conditions.append("a.diocese_id = ?")
+        conditions.append("diocese_id = ?")
         params.append(diocese_id)
     
     if conditions:
         query += " AND (" + " OR ".join(conditions) + ")"
         
-    query += " ORDER BY a.date_event ASC"
-    agenda_items = c.execute(query, params).fetchall()
+    query += " ORDER BY date_event ASC"
+    
+    try:
+        agenda_items = c.execute(query, params).fetchall()
+    except Exception as e:
+        st.error(f"Erreur de base de données : {e}")
+        st.info("Essayez de redémarrer l'application ou vérifiez la table 'agenda'.")
+        return
     
     if agenda_items:
         for item in agenda_items:
-            item_id, item_date_raw, item_type, item_lieu, item_desc, item_auteur, item_eid, item_pid, item_did, item_eq_nom, item_par_nom = item
+            item_id, item_date_raw, item_type, item_lieu, item_desc, item_auteur, item_eid, item_pid, item_did = item
             item_date = safe_date(item_date_raw)
             if not item_date: continue
             
-            # Déterminer la source de l'événement
+            # ✅ Déterminer la source en Python (beaucoup plus sûr que les sous-requêtes SQL)
             source = ""
             if item_eid:
-                source = f"👥 Équipe {item_eq_nom} ({item_par_nom})"
+                eq_info = c.execute("SELECT e.nom_equipe, p.nom FROM equipes e JOIN paroisses p ON e.paroisse_id = p.id WHERE e.id=?", (item_eid,)).fetchone()
+                if eq_info:
+                    source = f"👥 Équipe {eq_info[0]} ({eq_info[1]})"
             elif item_pid:
-                source = f"🏘️ Paroisse {item_par_nom}"
+                par_info = c.execute("SELECT nom FROM paroisses WHERE id=?", (item_pid,)).fetchone()
+                if par_info:
+                    source = f"🏘️ Paroisse {par_info[0]}"
             elif item_did:
                 source = f"🏛️ Diocèse"
             
@@ -279,48 +283,6 @@ def afficher_agenda_complet_universel(equipe_id=None, paroisse_id=None, diocese_
                         st.rerun()
     else:
         st.info("Aucun événement à venir pour le moment.")
-
-    if paroisse_id:
-        # Toutes les équipes de cette paroisse
-        query += " AND a.paroisse_id=? AND a.equipe_id IS NOT NULL"
-        params.append(paroisse_id)
-    elif diocese_id:
-        # Toutes les paroisses et équipes du diocèse
-        query += " AND a.diocese_id=? AND (a.paroisse_id IS NOT NULL OR a.equipe_id IS NOT NULL)"
-        params.append(diocese_id)
-        
-    query += " ORDER BY a.date_event ASC"
-    agenda_items = c.execute(query, params).fetchall()
-    
-    if agenda_items:
-        for item in agenda_items:
-            item_date_raw, item_type, item_lieu, item_desc, item_auteur, item_eq, item_par = item
-            item_date = safe_date(item_date_raw)
-            if not item_date: continue
-            
-            # Déterminer la source de l'événement
-            source = ""
-            if item_eq:
-                source = f"👥 {item_eq} ({item_par})"
-            elif item_par:
-                source = f"🏘️ {item_par}"
-            
-            delta = (item_date - aujourd_hui).days
-            if delta == 0: delai_str = "🔴 Aujourd'hui !"
-            elif delta == 1: delai_str = "🟠 Demain"
-            elif delta <= 7: delai_str = f"🟡 Dans {delta} jours"
-            else: delai_str = f"🟢 Dans {delta} jours"
-            
-            icone = {"Prière mensuelle": "🧎", "Prière commune": "🙏", "Prière spéciale": "✨", "Pèlerinage": "🚶‍♂️", "Réunion": "🤝", "Autre": "📅"}.get(item_type, "📅")
-            header = f"{icone} {item_date.strftime('%d/%m/%Y')} - {item_type} - {source} ({delai_str})"
-            
-            with st.expander(header):
-                if source: st.write(f"🏢 **Source :** {source}")
-                if item_auteur: st.write(f"👤 **Ajouté par :** {item_auteur}")
-                if item_lieu: st.write(f"📍 **Lieu :** {item_lieu}")
-                if item_desc: st.write(f"📝 **Détails :** {item_desc}")
-    else:
-        st.info("Aucun événement prévu par les niveaux inférieurs.")
 
 def afficher_agenda(equipe_id):
     """Affiche l'agenda à venir d'une équipe (lecture seule)."""
@@ -638,9 +600,7 @@ c.execute('''CREATE TABLE IF NOT EXISTS archives (id INTEGER PRIMARY KEY, membre
 
 c.execute('''CREATE TABLE IF NOT EXISTS evenements (id INTEGER PRIMARY KEY, equipe_id INTEGER, type_evenement TEXT, date_evenement DATE, lieu TEXT)''')
 c.execute('''CREATE TABLE IF NOT EXISTS suivi_presences (id INTEGER PRIMARY KEY, membre_id INTEGER, evenement_id INTEGER, statut TEXT DEFAULT 'absent')''')
-
-c.execute('''CREATE TABLE IF NOT EXISTS agenda (id INTEGER PRIMARY KEY, equipe_id INTEGER, date_event DATE, type_event TEXT, lieu TEXT, description TEXT)''')
-
+c.execute('''CREATE TABLE IF NOT EXISTS agenda (id INTEGER PRIMARY KEY, equipe_id INTEGER, paroisse_id INTEGER, diocese_id INTEGER, date_event DATE, type_event TEXT, lieu TEXT, description TEXT, auteur_nom TEXT)''')
 commit_and_sync()
 
 # Migrations (ajout de colonnes si absentes)
@@ -693,20 +653,6 @@ try:
         commit_and_sync()
 except:
     pass
-
-try:
-    c.execute("ALTER TABLE agenda ADD COLUMN paroisse_id INTEGER")
-    conn.commit()
-except: pass
-try:
-    c.execute("ALTER TABLE agenda ADD COLUMN diocese_id INTEGER")
-    conn.commit()
-except: pass
-
-try:
-    c.execute("ALTER TABLE agenda ADD COLUMN auteur_nom TEXT")
-    conn.commit()
-except: pass
 
 # --- Initialisation ---
 c.execute("SELECT COUNT(*) FROM diocese")

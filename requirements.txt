@@ -2,5 +2,5 @@ streamlit
 pandas
 openpyxl
 Pillow
-libsql-client
 cloudinary
+libsql-experimental

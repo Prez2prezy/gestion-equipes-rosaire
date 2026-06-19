@@ -744,6 +744,15 @@ if st.session_state['role'] == 'diocese':
     # Après (supprimer "📊 Export Excel")
     menu = st.sidebar.radio("Navigation", ["Voir diocèse", "Créer paroisses", "Gérer paroisses", "Rechercher par matricule", "Gérer les accès", "Statistiques", "📅 Abonnements", "📌 Suivi", "💬 WhatsApp", "📦 Archives", "🗑️ Réinitialiser tout"])
 
+
+    if USE_TURSO:
+        st.sidebar.success("☁️ Connecté au Cloud (Turso)")
+    else:
+        st.sidebar.error("💾 Mode Local (Les données seront perdues)")
+
+
+
+    
     # Voir diocèse
     if menu == "Voir diocèse":
         st.markdown('<h2 style="color:#1A237E;">🏛️ DIOCÈSE DE GRAND-BASSAM</h2>', unsafe_allow_html=True)

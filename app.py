@@ -52,23 +52,36 @@ st.markdown("""
 USE_TURSO = False
 
 try:
-    from libsql_client import connect as turso_connect
+    from libsql_experimental import connect as turso_connect
     TURSO_URL = st.secrets.get("TURSO_URL")
     TURSO_AUTH_TOKEN = st.secrets.get("TURSO_AUTH_TOKEN")
     if TURSO_URL and TURSO_AUTH_TOKEN:
         USE_TURSO = True
 except Exception:
-    pass  # Si la librairie n'est pas installée ou pas de secrets, on reste en local
+    pass  # Si la librairie n'est pas installée, on reste en local
 
 if USE_TURSO:
-    # Connexion Cloud (Turso) en mode HTTP (plus stable sur Streamlit Cloud)
-    # Attention : on utilise TURSO_URL directement, pas de fichier local
-    conn = turso_connect(TURSO_URL, auth_token=TURSO_AUTH_TOKEN)
+    # Connexion Cloud (Turso) avec réplique locale pour la vitesse
+    conn = turso_connect("file:gestion_religieuse.db", sync_url=TURSO_URL, auth_token=TURSO_AUTH_TOKEN)
+    # Au démarrage, on télécharge les dernières données du cloud
+    try:
+        conn.sync()
+    except Exception as e:
+        st.warning(f"Synchronisation initiale impossible : {e}")
     c = conn.cursor()
 else:
     # Connexion Locale classique (pour votre PC)
     conn = sqlite3.connect('gestion_religieuse.db', check_same_thread=False)
     c = conn.cursor()
+
+# Fonction pour sauvegarder et synchroniser avec le cloud
+def commit_and_sync():
+    conn.commit()
+    if USE_TURSO:
+        try:
+            conn.sync() # Envoie les modifications au cloud immédiatement
+        except Exception as e:
+            st.error(f"Erreur de synchronisation cloud : {e}")
 
 # --- Configuration de Cloudinary (Stockage Photos Cloud) ---
 
@@ -252,7 +265,7 @@ def afficher_agenda_complet_universel(equipe_id=None, paroisse_id=None, diocese_
             if item_eid:
                 eq_info = c.execute("SELECT e.nom_equipe, p.nom FROM equipes e JOIN paroisses p ON e.paroisse_id = p.id WHERE e.id=?", (item_eid,)).fetchone()
                 if eq_info:
-                    source = f"👥 Équipe {eq_info[0]} ({eq_info[1]})"
+                    source = f"👥 {eq_info[0]} ({eq_info[1]})"
             elif item_pid:
                 par_info = c.execute("SELECT nom FROM paroisses WHERE id=?", (item_pid,)).fetchone()
                 if par_info:

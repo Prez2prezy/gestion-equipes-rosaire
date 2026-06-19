@@ -71,16 +71,6 @@ else:
     conn = sqlite3.connect('gestion_religieuse.db', check_same_thread=False)
     c = conn.cursor()
 
-
-# Fonction pour sauvegarder et synchroniser avec le cloud
-def commit_and_sync():
-    conn.commit()
-    if USE_TURSO:
-        try:
-            conn.sync() # Envoie les modifications au cloud immédiatement
-        except Exception as e:
-            st.error(f"Erreur de synchronisation cloud : {e}")
-
 # --- Configuration de Cloudinary (Stockage Photos Cloud) ---
 
 USE_CLOUDINARY = False

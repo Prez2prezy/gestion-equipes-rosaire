@@ -2222,9 +2222,9 @@ elif st.session_state['role'] == 'equipe':
                                         matricule = generer_matricule_unique()
                                         paroisse_id = c.execute("SELECT paroisse_id FROM equipes WHERE id=?", (eid,)).fetchone()[0]
                                         c.execute("""INSERT INTO membres 
-                                            (matricule, nom, prenom, date_naissance.isoformat(), whatsapp, date_adhesion.isoformat(), paroisse_id, equipe_id, statut, numero_meditation) 
+                                            (matricule, nom, prenom, date_naissance, whatsapp, date_adhesion, paroisse_id, equipe_id, statut, numero_meditation) 
                                             VALUES (?,?,?,?,?,?,?,?,?,?)""",
-                                            (matricule, nom, prenom, naissance, whatsapp, date_adhesion, paroisse_id, eid, 'actif', numero_meditation))
+                                            (matricule, nom, prenom, naissance.isoformat(), whatsapp, date_adhesion.isoformat(), paroisse_id, eid, 'actif', numero_meditation))
                                         mid = c.lastrowid
                                         if photo:
                                             chemin = sauvegarder_photo(photo, matricule)

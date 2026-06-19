@@ -182,15 +182,24 @@ def ajouter_evenement_agenda(equipe_id=None, paroisse_id=None, diocese_id=None, 
                 st.success("Événement enregistré avec succès ! ✅")
                 st.rerun()
 
-
 def afficher_agenda_complet_universel(equipe_id=None, paroisse_id=None, diocese_id=None):
     """Affiche l'agenda global en fonction du niveau hiérarchique de l'utilisateur."""
     st.subheader("📋 Planification des agendas (Vue d'ensemble)")
     
+    # ✅ AJOUT ESSENTIEL : On définit la variable aujourd_hui
+    aujourd_hui = date.today()
+    
+    query = '''SELECT id, date_event, type_event, lieu, description, auteur_nom,
+                      equipe_id, paroisse_id, diocese_id
+               FROM agenda 
+               WHERE date_event >= ? '''
+               
+    params = [aujourd_hui.isoformat()] # Conversion de la date en texte
+    
     # Construction des conditions pour voir les enfants et les parents
     conditions = []
-    params = [aujourd_hui.isoformat()] # ✅ Conversion de la date en texte
-    
+
+
     if equipe_id:
         conditions.append("equipe_id = ?")
         params.append(equipe_id)

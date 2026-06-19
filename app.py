@@ -60,19 +60,17 @@ try:
 except Exception:
     pass  # Si la librairie n'est pas installée, on reste en local
 
+
+
 if USE_TURSO:
-    # Connexion Cloud (Turso) avec réplique locale pour la vitesse
-    conn = turso_connect("file:gestion_religieuse.db", sync_url=TURSO_URL, auth_token=TURSO_AUTH_TOKEN)
-    # Au démarrage, on télécharge les dernières données du cloud
-    try:
-        conn.sync()
-    except Exception as e:
-        st.warning(f"Synchronisation initiale impossible : {e}")
+    # Connexion Cloud (Turso) en mode distant (plus stable sur Streamlit Cloud)
+    conn = turso_connect(TURSO_URL, auth_token=TURSO_AUTH_TOKEN)
     c = conn.cursor()
 else:
     # Connexion Locale classique (pour votre PC)
     conn = sqlite3.connect('gestion_religieuse.db', check_same_thread=False)
     c = conn.cursor()
+
 
 # Fonction pour sauvegarder et synchroniser avec le cloud
 def commit_and_sync():

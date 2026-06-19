@@ -52,7 +52,7 @@ st.markdown("""
 USE_TURSO = False
 
 try:
-    from libsql_experimental import connect as turso_connect
+    from libsql import connect as turso_connect
     TURSO_URL = st.secrets.get("TURSO_URL")
     TURSO_AUTH_TOKEN = st.secrets.get("TURSO_AUTH_TOKEN")
     if TURSO_URL and TURSO_AUTH_TOKEN:

@@ -2544,7 +2544,7 @@ elif st.session_state['role'] == 'equipe':
                         lieu_event = st.text_input("📍 Lieu de la rencontre", key="lieu_suivi_eq")
                     
                     event = c.execute("SELECT id, lieu FROM evenements WHERE equipe_id=? AND date_evenement=? AND type_evenement=?", 
-                                      (eid, date_event, type_event)).fetchone()
+                                      (eid, date_event.isoformat(), type_event)).fetchone()
                     event_id = None
                     if event:
                         event_id = event[0]

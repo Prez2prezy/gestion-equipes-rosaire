@@ -64,11 +64,19 @@ except Exception:
     pass  # Si la librairie n'est pas installée, on reste en local
 
 if USE_TURSO:
-    # Connexion Cloud (Turso) en mode 100% distant (plus de fichier local)
-    # On remplace libsql:// par https:// pour une connexion HTTP directe plus stable
-    url_https = TURSO_URL.replace("libsql://", "https://")
-    conn = turso_connect(url_https, auth_token=TURSO_AUTH_TOKEN)
-    c = conn.cursor()
+    try:
+        # On utilise l'URL libsql:// directement (plus stable)
+        conn = turso_connect(TURSO_URL, auth_token=TURSO_AUTH_TOKEN)
+        c = conn.cursor()
+        # Test immédiat pour voir si la connexion fonctionne vraiment
+        c.execute("SELECT 1")
+    except Exception as e:
+        # Si la connexion échoue, on affiche l'erreur EXACTE à l'écran
+        st.error(f"⚠️ Erreur de connexion à Turso : {type(e).__name__} - {e}")
+        st.info("Bascule automatique en mode local temporaire. Vos données ne seront pas sauvegardées sur le cloud tant que cette erreur persiste.")
+        USE_TURSO = False
+        conn = sqlite3.connect('gestion_religieuse.db', check_same_thread=False)
+        c = conn.cursor()
 else:
     # Connexion Locale classique (pour votre PC)
     conn = sqlite3.connect('gestion_religieuse.db', check_same_thread=False)
@@ -77,8 +85,6 @@ else:
 # Fonction pour sauvegarder
 def commit_and_sync():
     conn.commit()
-    # En mode distant, commit() envoie directement les données sur le cloud. Pas besoin de sync().
-
 
 # --- Configuration de Cloudinary (Stockage Photos Cloud) ---
 

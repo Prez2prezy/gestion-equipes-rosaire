@@ -47,7 +47,6 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-
 # --- Connexion à la base de données (Locale ou Turso Cloud) ---
 import sqlite3
 
@@ -65,15 +64,15 @@ except Exception:
 
 if USE_TURSO:
     try:
-        # On utilise l'URL libsql:// directement (plus stable)
-        conn = turso_connect(TURSO_URL, auth_token=TURSO_AUTH_TOKEN)
+        # Connexion Cloud (Turso) avec réplique locale pour la VITESSE
+        conn = turso_connect("file:gestion_religieuse.db", sync_url=TURSO_URL, auth_token=TURSO_AUTH_TOKEN)
         c = conn.cursor()
-        # Test immédiat pour voir si la connexion fonctionne vraiment
-        c.execute("SELECT 1")
+        # Télécharger les dernières données du cloud au démarrage
+        conn.sync()
     except Exception as e:
-        # Si la connexion échoue, on affiche l'erreur EXACTE à l'écran
+        # Ceinture de sécurité si jamais internet bug au démarrage
         st.error(f"⚠️ Erreur de connexion à Turso : {type(e).__name__} - {e}")
-        st.info("Bascule automatique en mode local temporaire. Vos données ne seront pas sauvegardées sur le cloud tant que cette erreur persiste.")
+        st.info("Bascule automatique en mode local temporaire.")
         USE_TURSO = False
         conn = sqlite3.connect('gestion_religieuse.db', check_same_thread=False)
         c = conn.cursor()
@@ -82,9 +81,15 @@ else:
     conn = sqlite3.connect('gestion_religieuse.db', check_same_thread=False)
     c = conn.cursor()
 
-# Fonction pour sauvegarder
+# Fonction pour sauvegarder et synchroniser avec le cloud
 def commit_and_sync():
     conn.commit()
+    if USE_TURSO:
+        try:
+            conn.sync() # Envoie les modifications au cloud immédiatement
+        except Exception as e:
+            st.error(f"Erreur de synchronisation cloud : {e}")
+
 
 # --- Configuration de Cloudinary (Stockage Photos Cloud) ---
 

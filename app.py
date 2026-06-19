@@ -46,13 +46,15 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+
 # --- Connexion à la base de données (Locale ou Turso Cloud) ---
+import sqlite3
 
 # Variable globale pour vérifier si on utilise le cloud
 USE_TURSO = False
 
 try:
-    from libsql import connect as turso_connect
+    from libsql_experimental import connect as turso_connect
     TURSO_URL = st.secrets.get("TURSO_URL")
     TURSO_AUTH_TOKEN = st.secrets.get("TURSO_AUTH_TOKEN")
     if TURSO_URL and TURSO_AUTH_TOKEN:
@@ -60,16 +62,28 @@ try:
 except Exception:
     pass  # Si la librairie n'est pas installée, on reste en local
 
-
-
 if USE_TURSO:
-    # Connexion Cloud (Turso) en mode distant (plus stable sur Streamlit Cloud)
-    conn = turso_connect(TURSO_URL, auth_token=TURSO_AUTH_TOKEN)
+    # Connexion Cloud (Turso) avec réplique locale
+    conn = turso_connect("file:gestion_religieuse.db", sync_url=TURSO_URL, auth_token=TURSO_AUTH_TOKEN)
+    try:
+        conn.sync()
+    except Exception as e:
+        st.warning(f"Synchronisation initiale impossible : {e}")
     c = conn.cursor()
 else:
     # Connexion Locale classique (pour votre PC)
     conn = sqlite3.connect('gestion_religieuse.db', check_same_thread=False)
     c = conn.cursor()
+
+# Fonction pour sauvegarder et synchroniser avec le cloud
+def commit_and_sync():
+    conn.commit()
+    if USE_TURSO:
+        try:
+            conn.sync()
+        except Exception as e:
+            st.error(f"Erreur de synchronisation cloud : {e}")
+
 
 # --- Configuration de Cloudinary (Stockage Photos Cloud) ---
 

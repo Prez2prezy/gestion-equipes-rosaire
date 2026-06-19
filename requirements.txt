@@ -3,4 +3,4 @@ pandas
 openpyxl
 Pillow
 cloudinary
-libsql
+libsql-experimental

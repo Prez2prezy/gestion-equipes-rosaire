@@ -48,7 +48,6 @@ st.markdown("""
 
 
 # --- Connexion à la base de données (Locale ou Turso Cloud) ---
-import sqlite3
 
 # Variable globale pour vérifier si on utilise le cloud
 USE_TURSO = False

@@ -1722,7 +1722,7 @@ elif st.session_state['role'] == 'paroisse':
                                 if st.form_submit_button("✅ Ajouter"):
                                     if nom and prenom:
                                         existant = c.execute("SELECT id FROM membres WHERE nom=? AND prenom=? AND date_naissance=? AND statut=?", 
-                                                        (nom, prenom, naissance, 'actif')).fetchone()
+                                                        (nom, prenom, naissance.isoformat(), 'actif')).fetchone()
                                         if existant:
                                             st.error("Ce membre existe déjà actif.")
                                         else:
@@ -1730,7 +1730,7 @@ elif st.session_state['role'] == 'paroisse':
                                             c.execute("""INSERT INTO membres 
                                                 (matricule, nom, prenom, date_naissance, whatsapp, date_adhesion, paroisse_id, equipe_id, statut, numero_meditation) 
                                                 VALUES (?,?,?,?,?,?,?,?,?,?)""",
-                                                (matricule, nom, prenom, naissance, whatsapp, date_adhesion, pid, eid, 'actif', numero_meditation))
+                                                (matricule, nom, prenom, naissance.isoformat(), whatsapp, date_adhesion.isoformat(), pid, eid, 'actif', numero_meditation))
                                             mid = c.lastrowid
                                             if photo:
                                                 chemin = sauvegarder_photo(photo, matricule)
@@ -2215,14 +2215,14 @@ elif st.session_state['role'] == 'equipe':
                             if st.form_submit_button("✅ Ajouter"):
                                 if nom and prenom:
                                     existant = c.execute("SELECT id FROM membres WHERE nom=? AND prenom=? AND date_naissance=? AND statut=?", 
-                                                    (nom, prenom, naissance, 'actif')).fetchone()
+                                                    (nom, prenom, naissance.isoformat(), 'actif')).fetchone()
                                     if existant:
                                         st.error("Membre déjà actif")
                                     else:
                                         matricule = generer_matricule_unique()
                                         paroisse_id = c.execute("SELECT paroisse_id FROM equipes WHERE id=?", (eid,)).fetchone()[0]
                                         c.execute("""INSERT INTO membres 
-                                            (matricule, nom, prenom, date_naissance, whatsapp, date_adhesion, paroisse_id, equipe_id, statut, numero_meditation) 
+                                            (matricule, nom, prenom, date_naissance.isoformat(), whatsapp, date_adhesion.isoformat(), paroisse_id, equipe_id, statut, numero_meditation) 
                                             VALUES (?,?,?,?,?,?,?,?,?,?)""",
                                             (matricule, nom, prenom, naissance, whatsapp, date_adhesion, paroisse_id, eid, 'actif', numero_meditation))
                                         mid = c.lastrowid

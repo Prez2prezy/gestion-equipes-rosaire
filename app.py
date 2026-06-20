@@ -47,7 +47,10 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
+
+
 # --- Connexion à la base de données (Locale ou Turso Cloud) ---
+import sqlite3
 
 # ✅ ASTUCE : Assistant qui convertit les listes en tuples pour libsql
 class CursorWrapper:
@@ -61,7 +64,7 @@ class CursorWrapper:
                 return self.cursor.execute(query, params)
             return self.cursor.execute(query, ())
         except Exception as e:
-            # Si c'est juste une colonne qui existe déjà, on ignore silencieusement
+            # On ignore silencieusement les erreurs de colonnes existantes
             if "duplicate column name" in str(e):
                 pass
             else:
@@ -71,7 +74,7 @@ class CursorWrapper:
     def __getattr__(self, name):
         return getattr(self.cursor, name)
 
-# ✅ MAGIC CODE : Cache la connexion pour ne pas la refaire à chaque clic
+# ✅ Cache la connexion pour ne pas la refaire à chaque clic
 @st.cache_resource
 def init_connection():
     try:
@@ -79,13 +82,14 @@ def init_connection():
         TURSO_URL = st.secrets.get("TURSO_URL")
         TURSO_AUTH_TOKEN = st.secrets.get("TURSO_AUTH_TOKEN")
         if TURSO_URL and TURSO_AUTH_TOKEN:
-            conn = turso_connect("file:gestion_religieuse.db", sync_url=TURSO_URL, auth_token=TURSO_AUTH_TOKEN)
-            conn.sync() # Ne se fera qu'une seule fois au démarrage de l'app !
+            # Connexion Cloud (Turso) en mode 100% distant (HTTP)
+            # On remplace libsql:// par https://
+            url_https = TURSO_URL.replace("libsql://", "https://")
+            conn = turso_connect(url_https, auth_token=TURSO_AUTH_TOKEN)
             return conn, True
     except Exception as e:
         st.error(f"⚠️ Erreur de connexion à Turso : {type(e).__name__} - {e}")
         st.info("Bascule automatique en mode local temporaire.")
-    # Mode local de secours
     return sqlite3.connect('gestion_religieuse.db', check_same_thread=False), False
 
 # On initialise la connexion (mise en cache)
@@ -95,11 +99,8 @@ c = CursorWrapper(conn.cursor()) if USE_TURSO else conn.cursor()
 # Fonction pour sauvegarder
 def commit_and_sync():
     conn.commit()
-    if USE_TURSO:
-        try:
-            conn.sync()
-        except Exception as e:
-            st.error(f"Erreur de synchronisation cloud : {e}")
+    # En mode distant, commit() envoie directement les données. Pas besoin de sync().
+
 
 # --- Configuration de Cloudinary (Stockage Photos Cloud) ---
 

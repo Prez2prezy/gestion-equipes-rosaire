@@ -18,6 +18,9 @@ import cloudinary.uploader
 # --- Configuration de la page ---
 st.set_page_config(page_title="Gestionnaire des Équipes du Rosaire - Diocèse de Grand-Bassam", layout="wide")
 
+
+
+
 # --- CSS personnalisé ---
 st.markdown("""
 <style>
@@ -743,12 +746,12 @@ if st.session_state['role'] == 'diocese':
         d = c.execute("SELECT responsable, bureau FROM diocese WHERE id=?", (1,)).fetchone()
         if d:
             st.markdown(f'''
-            <div style="font-size: 0.9rem; color: #1A237E;">
+            <div class="custom-info-box">
                 <b>Responsable diocésain :</b> {d[0]}<br>
                 <b>Bureau diocésain :</b> {d[1]}
             </div>
             ''', unsafe_allow_html=True)
-            
+    
             with st.expander("✏️ Modifier"):
                 nouveau_resp = st.text_input("Nouveau responsable", value=d[0])
                 nouveau_bureau = st.text_area("Nouveau bureau", value=d[1])
@@ -1406,17 +1409,17 @@ elif st.session_state['role'] == 'paroisse':
     # Ma paroisse
     if menu == "Ma paroisse":
         st.markdown(f'<h2 style="color:#1A237E; font-size: 1.4rem;">🏘️ {nom_paroisse}</h2>', unsafe_allow_html=True)
-        p = c.execute("SELECT commune, ville, responsable, bureau FROM paroisses WHERE id=?", (pid,)).fetchone()
+        p = c.execute("SELECT commune, ville, responsable, bureau FROM paroisses WHERE id=?", (pid,)).fetchone()      
         if p:
             st.markdown(f'''
-            <div style="font-size: 0.9rem; color: #1A237E;">
+            <div class="custom-info-box">
                 Commune : {p[0]}<br>
                 Ville : {p[1]}<br>
                 <b>Responsable :</b> {p[2]}<br>
                 <b>Bureau :</b> {p[3]}
             </div>
             ''', unsafe_allow_html=True)
-        
+
             # ✅ Ajout du bouton de modification
             with st.expander("✏️ Modifier les informations"):
                 nouveau_respo = st.text_input("Nouveau responsable", value=p[2] or "")
@@ -2138,17 +2141,16 @@ elif st.session_state['role'] == 'equipe':
         # ... (la suite de votre code)
         st.markdown(f'<h2 style="color:#1A237E; font-size: 1.4rem;">👥 {nom_equipe}</h2>', unsafe_allow_html=True)
         eq = c.execute("SELECT responsable, bureau FROM equipes WHERE id=?", (eid,)).fetchone()
-
         if eq:
             st.markdown(f'''
-            <div style="font-size: 0.9rem; color: #1A237E;">
+            <div class="custom-info-box">
                 <b>Responsable :</b> {eq[0]}<br>
                 <b>Bureau :</b> {eq[1]}
             </div>
             ''', unsafe_allow_html=True)
             nb = c.execute("SELECT COUNT(*) FROM membres WHERE equipe_id=? AND statut='actif'", (eid,)).fetchone()[0]
             st.metric("Effectif", f"{nb}/10")
-            
+
             # ✅ Ajout du bouton de modification
             with st.expander("✏️ Modifier les informations"):
                 nouveau_respo = st.text_input("Nouveau responsable", value=eq[0] or "")

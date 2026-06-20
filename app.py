@@ -19,30 +19,12 @@ import cloudinary.uploader
 st.set_page_config(page_title="Gestionnaire des Équipes du Rosaire - Diocèse de Grand-Bassam", layout="wide")
 
 # --- CSS personnalisé ---
-
 st.markdown("""
 <style>
     .stApp { background-color: #FFFFFF !important; }
     .main > div { background-color: #FFFFFF !important; }
-    .stMarkdown, .stMarkdown p,     /* ✅ Le titre s'adapte automatiquement pour tenir sur une ligne */
-    .stMarkdown h1 {
-        color: #1A237E !important;
-        white-space: nowrap !important; /* Interdit le passage à la ligne */
-        overflow: hidden !important;    /* Cache ce qui dépasse (au cas où) */
-        text-overflow: ellipsis !important; /* Met ... si vraiment l'écran est minuscule */
-        font-size: clamp(1rem, 3vw, 2rem) !important; /* Taille dynamique : 16px sur mobile, jusqu'à 32px sur grand écran */
-    }, .stMarkdown h2 {
-        white-space: nowrap !important; /* Interdit le passage à la ligne */
-        overflow: hidden !important;    /* Cache ce qui dépasse (au cas où) */
-        text-overflow: ellipsis !important; /* Met ... si vraiment l'écran est minuscule */
-        font-size: clamp(1rem, 3vw, 2rem) !important; /* Taille dynamique : 16px sur mobile, jusqu'à 32px sur grand écran */
-    }, .stMarkdown h3 {
-        color: #1A237E !important;
-        white-space: nowrap !important; /* Interdit le passage à la ligne */
-        overflow: hidden !important;    /* Cache ce qui dépasse (au cas où) */
-        text-overflow: ellipsis !important; /* Met ... si vraiment l'écran est minuscule */
-        font-size: clamp(1rem, 3vw, 2rem) !important; /* Taille dynamique : 16px sur mobile, jusqu'à 32px sur grand écran */
-    }  .streamlit-expanderHeader span:last-child { display: none !important; }
+    .stMarkdown, .stMarkdown p, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 { color: #1A237E !important; }
+    .streamlit-expanderHeader span:last-child { display: none !important; }
     .stMetric label, .stMetric .stMarkdown { color: #1A237E !important; }
     .stSidebar { background-color: #FFFFFF !important; }
     .stSidebar .stMarkdown, .stSidebar label { color: #1A237E !important; }
@@ -62,25 +44,38 @@ st.markdown("""
         color: white !important;
     }
 
-    /* ✅ RÈGLES POUR LES PETITS ÉCRANS (TÉLÉPHONES) */
+    /* TITRE PRINCIPAL (h1) */
+    .stMarkdown h1 {
+        color: #1A237E !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        font-size: clamp(1rem, 3vw, 2rem) !important;
+    }
+
+    /* TITRES DE SECTIONS (h2) */
+    .stMarkdown h2 {
+        color: #1A237E !important;
+        font-size: 1.4rem !important;
+    }
+
+    /* ✅ SOUS-TITRES (h3) - Pour "Vos évènements" et "Planification" */
+    .stMarkdown h3 {
+        color: #1A237E !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        font-size: clamp(0.9rem, 2vw, 1.3rem) !important;
+    }
+    
+    /* RÈGLES POUR LES PETITS ÉCRANS */
     @media (max-width: 768px) {
-        /* Force le titre principal à rester sur une seule ligne */
-        .stMarkdown h1 {
-            white-space: nowrap !important;
-            font-size: 1.3rem !important; /* Réduit la taille sur mobile */
-        }
-        /* Réduit la taille des sous-titres */
-        .stMarkdown h2 {
-            font-size: 1.1rem !important;
-        }
-        /* Réduit un peu la taille du texte normal */
         .stMarkdown p, .stText {
             font-size: 0.9rem !important;
         }
     }
 </style>
 """, unsafe_allow_html=True)
-
 
 # ✅ ASTUCE : Assistant qui convertit les listes en tuples pour libsql
 class CursorWrapper:

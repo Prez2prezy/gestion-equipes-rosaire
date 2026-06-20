@@ -215,16 +215,20 @@ def ajouter_evenement_agenda(equipe_id=None, paroisse_id=None, diocese_id=None, 
                 st.rerun()
 
 
+
 def afficher_agenda_complet_universel(equipe_id=None, paroisse_id=None, diocese_id=None):
     """Affiche l'agenda global en fonction du niveau hiérarchique de l'utilisateur."""
     st.subheader("📋 Planification des agendas (Vue d'ensemble)")
     
     aujourd_hui = date.today()
+    # ✅ On convertit la date en texte ICI, une bonne fois pour toutes
+    aujourdhui_str = aujourd_hui.isoformat()
+    
     query = '''SELECT id, date_event, type_event, lieu, description, auteur_nom,
                       equipe_id, paroisse_id, diocese_id
                FROM agenda 
                WHERE date_event >= ? '''
-    params = [aujourd_hui]
+    params = [aujourdhui_str] 
     
     # Construction des conditions pour voir les enfants et les parents
     conditions = []
@@ -249,7 +253,7 @@ def afficher_agenda_complet_universel(equipe_id=None, paroisse_id=None, diocese_
         params.append(paroisse_id)
         # 3. Les événements du diocèse
         conditions.append("(diocese_id = 1 AND paroisse_id IS NULL AND equipe_id IS NULL)")
-
+        
     elif diocese_id:
         # 1. Les événements créés par le diocèse lui-même
         conditions.append("(diocese_id = ? AND paroisse_id IS NULL AND equipe_id IS NULL)")
@@ -260,7 +264,7 @@ def afficher_agenda_complet_universel(equipe_id=None, paroisse_id=None, diocese_
         # 3. Les événements créés par les équipes du diocèse
         conditions.append("equipe_id IN (SELECT id FROM equipes WHERE paroisse_id IN (SELECT id FROM paroisses WHERE diocese_id = ?))")
         params.append(diocese_id)
-
+    
     if conditions:
         query += " AND (" + " OR ".join(conditions) + ")"
         
@@ -270,7 +274,6 @@ def afficher_agenda_complet_universel(equipe_id=None, paroisse_id=None, diocese_
         agenda_items = c.execute(query, params).fetchall()
     except Exception as e:
         st.error(f"Erreur de base de données : {e}")
-        st.info("Essayez de redémarrer l'application ou vérifiez la table 'agenda'.")
         return
     
     if agenda_items:
@@ -279,7 +282,7 @@ def afficher_agenda_complet_universel(equipe_id=None, paroisse_id=None, diocese_
             item_date = safe_date(item_date_raw)
             if not item_date: continue
             
-            # ✅ Déterminer la source en Python (beaucoup plus sûr que les sous-requêtes SQL)
+            # Déterminer la source en Python
             source = ""
             if item_eid:
                 eq_info = c.execute("SELECT e.nom_equipe, p.nom FROM equipes e JOIN paroisses p ON e.paroisse_id = p.id WHERE e.id=?", (item_eid,)).fetchone()
@@ -308,14 +311,13 @@ def afficher_agenda_complet_universel(equipe_id=None, paroisse_id=None, diocese_
                 if item_lieu: st.write(f"📍 **Lieu :** {item_lieu}")
                 if item_desc: st.write(f"📝 **Détails :** {item_desc}")
                 
-                # Bouton supprimer (uniquement si l'événement appartient à l'entité connectée)
+                # Bouton supprimer
                 can_delete = False
                 if equipe_id and item_eid == equipe_id: can_delete = True
                 if paroisse_id and item_pid == paroisse_id and not item_eid: can_delete = True
                 if diocese_id and item_did == diocese_id and not item_pid and not item_eid: can_delete = True
                 
                 if can_delete:
-                    # Ajout d'un suffixe unique pour éviter les erreurs de clés dupliquées
                     btn_key_suffix = f"eq{equipe_id}_par{paroisse_id}_dio{diocese_id}"
                     if st.button("🗑️ Supprimer de l'agenda", key=f"del_agenda_{item_id}_{btn_key_suffix}"):
                         c.execute("DELETE FROM agenda WHERE id=?", (item_id,))

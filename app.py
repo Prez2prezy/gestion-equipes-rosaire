@@ -1326,7 +1326,7 @@ if st.session_state['role'] == 'diocese':
 
     # WhatsApp
     elif menu == "💬 WhatsApp":
-        st.markdown('<h2 style="color:#1A237E;">💬 Communications WhatsApp</h2>', unsafe_allow_html=True)
+        st.markdown('<h2 style="color:#1A237E;">💬 Messages WhatsApp</h2>', unsafe_allow_html=True)
         tab1, tab2 = st.tabs(["🎂 Anniversaires", "📢 Rappels réabonnement"])
         with tab1:
             afficher_anniversaires_whatsapp()
@@ -1346,7 +1346,7 @@ if st.session_state['role'] == 'diocese':
     
     # Archives (consultation seule)
     elif menu == "📦 Archives":
-        st.markdown('<h2 style="color:#1A237E;">📦 Archives du diocèse</h2>', unsafe_allow_html=True)
+        st.markdown('<h2 style="color:#1A237E;">📦  Archives - diocèse</h2>', unsafe_allow_html=True)
         archives = c.execute('''
             SELECT m.matricule, m.nom, m.prenom, a.situation, a.date_debut, a.date_fin, a.commentaire,
                    p.nom as paroisse, e.nom_equipe as equipe, a.auteur_nom
@@ -2049,7 +2049,7 @@ elif st.session_state['role'] == 'paroisse':
 
     # WhatsApp
     elif menu == "WhatsApp":
-        st.markdown(f'<h2 style="color:#1A237E;">💬 Communications WhatsApp - {nom_paroisse}</h2>', unsafe_allow_html=True)
+        st.markdown(f'<h2 style="color:#1A237E;">💬 Messages WhatsApp - {nom_paroisse}</h2>', unsafe_allow_html=True)
         tab1, tab2 = st.tabs(["🎂 Anniversaires", "📢 Rappels réabonnement"])
         with tab1:
             afficher_anniversaires_whatsapp()
@@ -2083,7 +2083,7 @@ elif st.session_state['role'] == 'paroisse':
     
     # Archives (lecture seule)
     elif menu == "Archives":
-        st.markdown(f'<h2 style="color:#1A237E;">📦 Archives de la paroisse {nom_paroisse}</h2>', unsafe_allow_html=True)
+        st.markdown(f'<h2 style="color:#1A237E;">📦  Archives - paroisse {nom_paroisse}</h2>', unsafe_allow_html=True)
         archives = c.execute('''
             SELECT m.matricule, m.nom, m.prenom, a.situation, a.date_debut, a.date_fin, a.commentaire,
                    e.nom_equipe as equipe, a.auteur_nom
@@ -2579,7 +2579,7 @@ elif st.session_state['role'] == 'equipe':
         
     # WhatsApp
     elif menu == "WhatsApp":
-        st.markdown(f'<h2 style="color:#1A237E;">💬 Communications WhatsApp - {nom_equipe}</h2>', unsafe_allow_html=True)
+        st.markdown(f'<h2 style="color:#1A237E;">💬 Messages WhatsApp - {nom_equipe}</h2>', unsafe_allow_html=True)
         tab1, tab2 = st.tabs(["🎂 Anniversaires", "📢 Rappels réabonnement"])
         with tab1:
             afficher_anniversaires_whatsapp()
@@ -2589,7 +2589,7 @@ elif st.session_state['role'] == 'equipe':
     
     # Archives
     elif menu == "Archives":
-        st.markdown(f'<h2 style="color:#1A237E;">📦 Archives de {nom_equipe}</h2>', unsafe_allow_html=True)
+        st.markdown(f'<h2 style="color:#1A237E;">📦 Archives - {nom_equipe}</h2>', unsafe_allow_html=True)
         membres_actifs = c.execute("SELECT id, nom, prenom, matricule FROM membres WHERE equipe_id=? AND statut='actif' ORDER BY nom", (eid,)).fetchall()
         archives_equipe = c.execute('''
             SELECT a.id, m.nom, m.prenom, m.matricule, a.situation, a.date_debut, a.date_fin, a.commentaire, m.id as membre_id

@@ -50,23 +50,24 @@ st.markdown("""
 # --- Connexion à la base de données (Locale ou Turso Cloud) ---
 
 # ✅ ASTUCE : Assistant qui convertit les listes en tuples pour libsql
-# ✅ ASTUCE : Assistant qui convertit les listes en tuples pour libsql
 class CursorWrapper:
     def __init__(self, real_cursor):
         self.cursor = real_cursor
     def execute(self, query, params=None):
         try:
-            # Si on a des paramètres (une liste ou un tuple)
             if params is not None:
                 if isinstance(params, list):
                     params = tuple(params)
                 return self.cursor.execute(query, params)
-            # Si on n'a pas de paramètres, on envoie un tuple vide (Turso préfère ça)
             return self.cursor.execute(query, ())
         except Exception as e:
-            st.error(f"Erreur SQL détaillée : {type(e).__name__} - {e}")
-            st.info(f"Requête : {query}")
-            raise e # On relance l'erreur pour ne pas casser le reste
+            # Si c'est juste une colonne qui existe déjà, on ignore silencieusement
+            if "duplicate column name" in str(e):
+                pass
+            else:
+                st.error(f"Erreur SQL détaillée : {type(e).__name__} - {e}")
+                st.info(f"Requête : {query}")
+            raise e
     def __getattr__(self, name):
         return getattr(self.cursor, name)
 
@@ -640,57 +641,6 @@ c.execute('''CREATE TABLE IF NOT EXISTS evenements (id INTEGER PRIMARY KEY, equi
 c.execute('''CREATE TABLE IF NOT EXISTS suivi_presences (id INTEGER PRIMARY KEY, membre_id INTEGER, evenement_id INTEGER, statut TEXT DEFAULT 'absent')''')
 c.execute('''CREATE TABLE IF NOT EXISTS agenda (id INTEGER PRIMARY KEY, equipe_id INTEGER, paroisse_id INTEGER, diocese_id INTEGER, date_event DATE, type_event TEXT, lieu TEXT, description TEXT, auteur_nom TEXT)''')
 commit_and_sync()
-
-# Migrations (ajout de colonnes si absentes)
-try: 
-    c.execute("ALTER TABLE membres ADD COLUMN statut TEXT DEFAULT 'actif'")
-    commit_and_sync()
-except: 
-    pass
-
-try: 
-    c.execute("ALTER TABLE membres ADD COLUMN numero_meditation TEXT")
-    commit_and_sync()
-except: 
-    pass
-
-try: 
-    c.execute("ALTER TABLE abonnements ADD COLUMN annee_debut INTEGER")
-    commit_and_sync()
-except: 
-    pass
-
-try: 
-    c.execute("ALTER TABLE archives ADD COLUMN situation TEXT")
-    commit_and_sync()
-except: 
-    pass
-
-try: 
-    c.execute("ALTER TABLE archives ADD COLUMN date_debut DATE")
-    commit_and_sync()
-except: 
-    pass
-
-try: 
-    c.execute("ALTER TABLE archives ADD COLUMN date_fin DATE")
-    commit_and_sync()
-except: 
-    pass
-
-
-# --- Migration pour le Suivi des présences ---
-# On vérifie si l'ancienne table suivi_presences existe avec l'ancien schéma
-try:
-    cols = c.execute("PRAGMA table_info(suivi_presences)").fetchall()
-    col_names = [col[1] for col in cols]
-    # Si la table existe mais n'a pas la colonne 'evenement_id', c'est l'ancienne version
-    if col_names and 'evenement_id' not in col_names:
-        c.execute("DROP TABLE IF EXISTS suivi_presences")
-        c.execute("DROP TABLE IF EXISTS evenements")
-        commit_and_sync()
-except:
-    pass
 
 # --- Initialisation ---
 c.execute("SELECT COUNT(*) FROM diocese")

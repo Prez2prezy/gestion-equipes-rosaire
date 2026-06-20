@@ -737,7 +737,7 @@ if st.session_state['role'] == 'diocese':
 
     # Voir diocèse
     if menu == "Voir diocèse":
-        st.markdown('<h2 style="color:#1A237E;">🏛️ DIOCÈSE DE GRAND-BASSAM</h2>', unsafe_allow_html=True)
+        st.markdown('<h2 style="color:#1A237E;font-size: 1.4rem;">🏛️ DIOCÈSE DE GRAND-BASSAM</h2>', unsafe_allow_html=True)
         d = c.execute("SELECT responsable, bureau FROM diocese WHERE id=?", (1,)).fetchone()
         if d:
             st.write(f"**Responsable diocésain :** {d[0]}")
@@ -1398,7 +1398,7 @@ elif st.session_state['role'] == 'paroisse':
     
     # Ma paroisse
     if menu == "Ma paroisse":
-        st.markdown(f'<h2 style="color:#1A237E;">🏘️ {nom_paroisse}</h2>', unsafe_allow_html=True)
+        st.markdown(f'<h2 style="color:#1A237E; font-size: 1.4rem;">🏘️ {nom_paroisse}</h2>', unsafe_allow_html=True)
         p = c.execute("SELECT commune, ville, responsable, bureau FROM paroisses WHERE id=?", (pid,)).fetchone()
         if p:
             st.write(f"Commune : {p[0]}")
@@ -2125,7 +2125,7 @@ elif st.session_state['role'] == 'equipe':
     # Mon équipe
     if menu == "Mon équipe":
         # ... (la suite de votre code)
-        st.markdown(f'<h2 style="color:#1A237E;">👥 {nom_equipe}</h2>', unsafe_allow_html=True)
+        st.markdown(f'<h2 style="color:#1A237E; font-size: 1.4rem;">👥 {nom_equipe}</h2>', unsafe_allow_html=True)
         eq = c.execute("SELECT responsable, bureau FROM equipes WHERE id=?", (eid,)).fetchone()
         if eq:
             st.write(f"**Responsable :** {eq[0]}")

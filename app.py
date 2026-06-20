@@ -18,10 +18,7 @@ import cloudinary.uploader
 # --- Configuration de la page ---
 st.set_page_config(page_title="Gestionnaire des Équipes du Rosaire - Diocèse de Grand-Bassam", layout="wide")
 
-
 # --- CSS personnalisé ---
-
-
 
 st.markdown("""
 <style>
@@ -34,8 +31,18 @@ st.markdown("""
         overflow: hidden !important;    /* Cache ce qui dépasse (au cas où) */
         text-overflow: ellipsis !important; /* Met ... si vraiment l'écran est minuscule */
         font-size: clamp(1rem, 3vw, 2rem) !important; /* Taille dynamique : 16px sur mobile, jusqu'à 32px sur grand écran */
-    }, .stMarkdown h2, .stMarkdown h3 { color: #1A237E !important; }
-    .streamlit-expanderHeader span:last-child { display: none !important; }
+    }, .stMarkdown h2 {
+        white-space: nowrap !important; /* Interdit le passage à la ligne */
+        overflow: hidden !important;    /* Cache ce qui dépasse (au cas où) */
+        text-overflow: ellipsis !important; /* Met ... si vraiment l'écran est minuscule */
+        font-size: clamp(1rem, 3vw, 2rem) !important; /* Taille dynamique : 16px sur mobile, jusqu'à 32px sur grand écran */
+    }, .stMarkdown h3 {
+        color: #1A237E !important;
+        white-space: nowrap !important; /* Interdit le passage à la ligne */
+        overflow: hidden !important;    /* Cache ce qui dépasse (au cas où) */
+        text-overflow: ellipsis !important; /* Met ... si vraiment l'écran est minuscule */
+        font-size: clamp(1rem, 3vw, 2rem) !important; /* Taille dynamique : 16px sur mobile, jusqu'à 32px sur grand écran */
+    }  .streamlit-expanderHeader span:last-child { display: none !important; }
     .stMetric label, .stMetric .stMarkdown { color: #1A237E !important; }
     .stSidebar { background-color: #FFFFFF !important; }
     .stSidebar .stMarkdown, .stSidebar label { color: #1A237E !important; }
@@ -2702,4 +2709,3 @@ elif st.session_state['role'] == 'equipe':
                                 st.info("Un défunt ne peut pas être réintégré.")
         else:
             st.info("Aucune archive pour cette équipe.")
-            

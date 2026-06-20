@@ -1,5 +1,5 @@
 import streamlit as st
-import sqlite3  # <-- Déjà présent, on y touche pas
+import sqlite3
 from datetime import date, timedelta
 import os
 import hashlib
@@ -9,16 +9,46 @@ from PIL import Image
 import shutil
 import pandas as pd
 import io
+import csv
+from io import StringIO
 import urllib.parse
+import cloudinary
+import cloudinary.uploader
 
 # --- Configuration de la page ---
 st.set_page_config(page_title="Gestionnaire des Équipes du Rosaire - Diocèse de Grand-Bassam", layout="wide")
 
 # --- CSS personnalisé ---
-st.markdown("""...""", unsafe_allow_html=True)
+st.markdown("""
+<style>
+    .stApp { background-color: #FFFFFF !important; }
+    .main > div { background-color: #FFFFFF !important; }
+    .stMarkdown, .stMarkdown p, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 { color: #1A237E !important; }
+    .streamlit-expanderHeader span:last-child { display: none !important; }
+    .stMetric label, .stMetric .stMarkdown { color: #1A237E !important; }
+    .stSidebar { background-color: #FFFFFF !important; }
+    .stSidebar .stMarkdown, .stSidebar label { color: #1A237E !important; }
+    .stTextInput input, .stTextArea textarea, .stSelectbox select { background-color: #FFFFFF !important; color: #1A237E !important; }
+    .whatsapp-link {
+        display: inline-block;
+        background-color: #25D366;
+        color: white !important;
+        padding: 5px 12px;
+        border-radius: 30px;
+        text-decoration: none;
+        font-size: 13px;
+        margin-top: 5px;
+    }
+    .whatsapp-link:hover {
+        background-color: #128C7E;
+        color: white !important;
+    }
+</style>
+""", unsafe_allow_html=True)
 
-# --- Connexion à la base de données ---
-# (On NE RÉÉCRIT PAS "import sqlite3" ici, on utilise celui du haut)
+
+# --- Connexion à la base de données (Locale ou Turso Cloud) ---
+import sqlite3
 
 # ✅ ASTUCE : Assistant qui convertit les listes en tuples pour libsql
 class CursorWrapper:
@@ -26,42 +56,35 @@ class CursorWrapper:
         self.cursor = real_cursor
     def execute(self, query, params=None):
         if isinstance(params, list):
-            params = tuple(params) # Conversion forcée en tuple
+            params = tuple(params)
         if params is not None:
             return self.cursor.execute(query, params)
         return self.cursor.execute(query)
     def __getattr__(self, name):
         return getattr(self.cursor, name)
 
-USE_TURSO = False
-# ... (la suite du code de connexion)
-
-try:
-    from libsql_experimental import connect as turso_connect
-    TURSO_URL = st.secrets.get("TURSO_URL")
-    TURSO_AUTH_TOKEN = st.secrets.get("TURSO_AUTH_TOKEN")
-    if TURSO_URL and TURSO_AUTH_TOKEN:
-        USE_TURSO = True
-except Exception:
-    pass
-
-if USE_TURSO:
+# ✅ MAGIC CODE : Cache la connexion pour ne pas la refaire à chaque clic
+@st.cache_resource
+def init_connection():
     try:
-        # Connexion Cloud (Turso) avec réplique locale
-        conn = turso_connect("file:gestion_religieuse.db", sync_url=TURSO_URL, auth_token=TURSO_AUTH_TOKEN)
-        # On enveloppe le curseur avec notre assistant
-        c = CursorWrapper(conn.cursor())
-        conn.sync()
+        from libsql_experimental import connect as turso_connect
+        TURSO_URL = st.secrets.get("TURSO_URL")
+        TURSO_AUTH_TOKEN = st.secrets.get("TURSO_AUTH_TOKEN")
+        if TURSO_URL and TURSO_AUTH_TOKEN:
+            conn = turso_connect("file:gestion_religieuse.db", sync_url=TURSO_URL, auth_token=TURSO_AUTH_TOKEN)
+            conn.sync() # Ne se fera qu'une seule fois au démarrage de l'app !
+            return conn, True
     except Exception as e:
         st.error(f"⚠️ Erreur de connexion à Turso : {type(e).__name__} - {e}")
         st.info("Bascule automatique en mode local temporaire.")
-        USE_TURSO = False
-        conn = sqlite3.connect('gestion_religieuse.db', check_same_thread=False)
-        c = conn.cursor()
-else:
-    conn = sqlite3.connect('gestion_religieuse.db', check_same_thread=False)
-    c = conn.cursor()
+    # Mode local de secours
+    return sqlite3.connect('gestion_religieuse.db', check_same_thread=False), False
 
+# On initialise la connexion (mise en cache)
+conn, USE_TURSO = init_connection()
+c = CursorWrapper(conn.cursor()) if USE_TURSO else conn.cursor()
+
+# Fonction pour sauvegarder
 def commit_and_sync():
     conn.commit()
     if USE_TURSO:
@@ -182,62 +205,65 @@ def ajouter_evenement_agenda(equipe_id=None, paroisse_id=None, diocese_id=None, 
                 st.success("Événement enregistré avec succès ! ✅")
                 st.rerun()
 
+
 def afficher_agenda_complet_universel(equipe_id=None, paroisse_id=None, diocese_id=None):
     """Affiche l'agenda global en fonction du niveau hiérarchique de l'utilisateur."""
     st.subheader("📋 Planification des agendas (Vue d'ensemble)")
     
-    # ✅ AJOUT ESSENTIEL : On définit la variable aujourd_hui
     aujourd_hui = date.today()
-    
     query = '''SELECT id, date_event, type_event, lieu, description, auteur_nom,
                       equipe_id, paroisse_id, diocese_id
                FROM agenda 
                WHERE date_event >= ? '''
-               
-    params = [aujourd_hui.isoformat()] # Conversion de la date en texte
+    params = [aujourd_hui]
     
     # Construction des conditions pour voir les enfants et les parents
     conditions = []
-
-
     if equipe_id:
+        # 1. Les événements de l'équipe elle-même
         conditions.append("equipe_id = ?")
         params.append(equipe_id)
+        # 2. Les événements de sa paroisse parente
         pid = c.execute("SELECT paroisse_id FROM equipes WHERE id=?", (equipe_id,)).fetchone()
         if pid and pid[0]:
             conditions.append("(paroisse_id = ? AND equipe_id IS NULL)")
             params.append(pid[0])
+        # 3. Les événements du diocèse
         conditions.append("(diocese_id = 1 AND paroisse_id IS NULL AND equipe_id IS NULL)")
         
     elif paroisse_id:
+        # 1. Les événements de la paroisse elle-même
         conditions.append("(paroisse_id = ? AND equipe_id IS NULL)")
         params.append(paroisse_id)
+        # 2. Les événements de ses équipes enfants
         conditions.append("equipe_id IN (SELECT id FROM equipes WHERE paroisse_id = ?)")
         params.append(paroisse_id)
+        # 3. Les événements du diocèse
         conditions.append("(diocese_id = 1 AND paroisse_id IS NULL AND equipe_id IS NULL)")
-        
+
     elif diocese_id:
+        # 1. Les événements créés par le diocèse lui-même
         conditions.append("(diocese_id = ? AND paroisse_id IS NULL AND equipe_id IS NULL)")
         params.append(diocese_id)
+        # 2. Les événements créés par les paroisses du diocèse
         conditions.append("paroisse_id IN (SELECT id FROM paroisses WHERE diocese_id = ?)")
         params.append(diocese_id)
+        # 3. Les événements créés par les équipes du diocèse
         conditions.append("equipe_id IN (SELECT id FROM equipes WHERE paroisse_id IN (SELECT id FROM paroisses WHERE diocese_id = ?))")
         params.append(diocese_id)
-    
+
     if conditions:
         query += " AND (" + " OR ".join(conditions) + ")"
         
     query += " ORDER BY date_event ASC"
     
     try:
-        # ✅ Conversion cruciale de la liste en TUPLE pour libsql
-        agenda_items = c.execute(query, tuple(params)).fetchall()
+        agenda_items = c.execute(query, params).fetchall()
     except Exception as e:
         st.error(f"Erreur de base de données : {e}")
+        st.info("Essayez de redémarrer l'application ou vérifiez la table 'agenda'.")
         return
-
-
-
+    
     if agenda_items:
         for item in agenda_items:
             item_id, item_date_raw, item_type, item_lieu, item_desc, item_auteur, item_eid, item_pid, item_did = item
@@ -249,7 +275,7 @@ def afficher_agenda_complet_universel(equipe_id=None, paroisse_id=None, diocese_
             if item_eid:
                 eq_info = c.execute("SELECT e.nom_equipe, p.nom FROM equipes e JOIN paroisses p ON e.paroisse_id = p.id WHERE e.id=?", (item_eid,)).fetchone()
                 if eq_info:
-                    source = f"👥 {eq_info[0]} ({eq_info[1]})"
+                    source = f"👥 Équipe {eq_info[0]} ({eq_info[1]})"
             elif item_pid:
                 par_info = c.execute("SELECT nom FROM paroisses WHERE id=?", (item_pid,)).fetchone()
                 if par_info:
@@ -340,7 +366,7 @@ def safe_date(value):
         except (ValueError, TypeError):
             return None
     return None
-
+    
 def afficher_historique_suivi(equipe_id, filtre_type="Tous", limit=20):
     """Affiche l'historique de présence d'une équipe (lecture seule)."""
     types_evenements = ["Prière mensuelle", "Prière commune", "Prière spéciale", "Pèlerinage"]
@@ -366,9 +392,8 @@ def afficher_historique_suivi(equipe_id, filtre_type="Tous", limit=20):
         requete = requete.format(filtre="")
     params.append(limit)
     
-    # ✅ On exécute directement sans se soucier si c'est une liste, le Wrapper s'occupe de tout !
     evenements = c.execute(requete, params).fetchall()
-
+    
     if evenements:
         for ev in evenements:
             ev_id, date_raw, type_ev, lieu, nb_p, nb_e, nb_a = ev
@@ -415,9 +440,6 @@ def afficher_historique_suivi(equipe_id, filtre_type="Tous", limit=20):
                     st.write("❌ **Absents :** " + ", ".join([f"{a[0]} {a[1]}" for a in absents]))
     else:
         st.info("Aucun historique de présence pour le moment.")
-
-
-
 
 # ✅ Fonction centralisée pour archiver un membre
 def archiver_membre(membre_id, situation, annee_debut, annee_fin, commentaire, auteur_id, auteur_nom, auteur_role):
@@ -732,15 +754,6 @@ if st.session_state['role'] == 'diocese':
     # Après (supprimer "📊 Export Excel")
     menu = st.sidebar.radio("Navigation", ["Voir diocèse", "Créer paroisses", "Gérer paroisses", "Rechercher par matricule", "Gérer les accès", "Statistiques", "📅 Abonnements", "📌 Suivi", "💬 WhatsApp", "📦 Archives", "🗑️ Réinitialiser tout"])
 
-
-    if USE_TURSO:
-        st.sidebar.success("☁️ Connecté au Cloud (Turso)")
-    else:
-        st.sidebar.error("💾 Mode Local (Les données seront perdues)")
-
-
-
-    
     # Voir diocèse
     if menu == "Voir diocèse":
         st.markdown('<h2 style="color:#1A237E;">🏛️ DIOCÈSE DE GRAND-BASSAM</h2>', unsafe_allow_html=True)
@@ -1707,7 +1720,7 @@ elif st.session_state['role'] == 'paroisse':
                                 if st.form_submit_button("✅ Ajouter"):
                                     if nom and prenom:
                                         existant = c.execute("SELECT id FROM membres WHERE nom=? AND prenom=? AND date_naissance=? AND statut=?", 
-                                                        (nom, prenom, naissance.isoformat(), 'actif')).fetchone()
+                                                        (nom, prenom, naissance, 'actif')).fetchone()
                                         if existant:
                                             st.error("Ce membre existe déjà actif.")
                                         else:
@@ -1715,7 +1728,7 @@ elif st.session_state['role'] == 'paroisse':
                                             c.execute("""INSERT INTO membres 
                                                 (matricule, nom, prenom, date_naissance, whatsapp, date_adhesion, paroisse_id, equipe_id, statut, numero_meditation) 
                                                 VALUES (?,?,?,?,?,?,?,?,?,?)""",
-                                                (matricule, nom, prenom, naissance.isoformat(), whatsapp, date_adhesion.isoformat(), pid, eid, 'actif', numero_meditation))
+                                                (matricule, nom, prenom, naissance, whatsapp, date_adhesion, pid, eid, 'actif', numero_meditation))
                                             mid = c.lastrowid
                                             if photo:
                                                 chemin = sauvegarder_photo(photo, matricule)
@@ -2200,7 +2213,7 @@ elif st.session_state['role'] == 'equipe':
                             if st.form_submit_button("✅ Ajouter"):
                                 if nom and prenom:
                                     existant = c.execute("SELECT id FROM membres WHERE nom=? AND prenom=? AND date_naissance=? AND statut=?", 
-                                                    (nom, prenom, naissance.isoformat(), 'actif')).fetchone()
+                                                    (nom, prenom, naissance, 'actif')).fetchone()
                                     if existant:
                                         st.error("Membre déjà actif")
                                     else:
@@ -2209,7 +2222,7 @@ elif st.session_state['role'] == 'equipe':
                                         c.execute("""INSERT INTO membres 
                                             (matricule, nom, prenom, date_naissance, whatsapp, date_adhesion, paroisse_id, equipe_id, statut, numero_meditation) 
                                             VALUES (?,?,?,?,?,?,?,?,?,?)""",
-                                            (matricule, nom, prenom, naissance.isoformat(), whatsapp, date_adhesion.isoformat(), paroisse_id, eid, 'actif', numero_meditation))
+                                            (matricule, nom, prenom, naissance, whatsapp, date_adhesion, paroisse_id, eid, 'actif', numero_meditation))
                                         mid = c.lastrowid
                                         if photo:
                                             chemin = sauvegarder_photo(photo, matricule)
@@ -2524,7 +2537,7 @@ elif st.session_state['role'] == 'equipe':
                         lieu_event = st.text_input("📍 Lieu de la rencontre", key="lieu_suivi_eq")
                     
                     event = c.execute("SELECT id, lieu FROM evenements WHERE equipe_id=? AND date_evenement=? AND type_evenement=?", 
-                                      (eid, date_event.isoformat(), type_event)).fetchone()
+                                      (eid, date_event, type_event)).fetchone()
                     event_id = None
                     if event:
                         event_id = event[0]
@@ -2559,7 +2572,7 @@ elif st.session_state['role'] == 'equipe':
                             if event_id:
                                 c.execute("UPDATE evenements SET lieu=? WHERE id=?", (lieu_event, event_id))
                             else:
-                                c.execute("INSERT INTO evenements (equipe_id, type_evenement, date_evenement, lieu) VALUES (?, ?, ?, ?)", (eid, type_event, date_event.isoformat(), lieu_event))
+                                c.execute("INSERT INTO evenements (equipe_id, type_evenement, date_evenement, lieu) VALUES (?, ?, ?, ?)", (eid, type_event, date_event, lieu_event))
                                 event_id = c.lastrowid
                             c.execute("DELETE FROM suivi_presences WHERE evenement_id=?", (event_id,))
                             for m_id, statut in statuts.items():

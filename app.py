@@ -2495,7 +2495,7 @@ elif st.session_state['role'] == 'equipe':
                         lieu_event = st.text_input("📍 Lieu de la rencontre", key="lieu_suivi_eq")
                     
                     event = c.execute("SELECT id, lieu FROM evenements WHERE equipe_id=? AND date_evenement=? AND type_evenement=?", 
-                                      (eid, date_event, type_event)).fetchone()
+                                      (eid, date_event.isoformat(), type_event)).fetchone()
                     event_id = None
                     if event:
                         event_id = event[0]
@@ -2530,7 +2530,7 @@ elif st.session_state['role'] == 'equipe':
                             if event_id:
                                 c.execute("UPDATE evenements SET lieu=? WHERE id=?", (lieu_event, event_id))
                             else:
-                                c.execute("INSERT INTO evenements (equipe_id, type_evenement, date_evenement, lieu) VALUES (?, ?, ?, ?)", (eid, type_event, date_event, lieu_event))
+                                c.execute("INSERT INTO evenements (equipe_id, type_evenement, date_evenement, lieu) VALUES (?, ?, ?, ?)", (eid, type_event, date_event.isoformat(), lieu_event))
                                 event_id = c.lastrowid
                             c.execute("DELETE FROM suivi_presences WHERE evenement_id=?", (event_id,))
                             for m_id, statut in statuts.items():

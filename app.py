@@ -48,18 +48,25 @@ st.markdown("""
 
 
 # --- Connexion à la base de données (Locale ou Turso Cloud) ---
-import sqlite3
 
+# ✅ ASTUCE : Assistant qui convertit les listes en tuples pour libsql
 # ✅ ASTUCE : Assistant qui convertit les listes en tuples pour libsql
 class CursorWrapper:
     def __init__(self, real_cursor):
         self.cursor = real_cursor
     def execute(self, query, params=None):
-        if isinstance(params, list):
-            params = tuple(params)
-        if params is not None:
-            return self.cursor.execute(query, params)
-        return self.cursor.execute(query)
+        try:
+            # Si on a des paramètres (une liste ou un tuple)
+            if params is not None:
+                if isinstance(params, list):
+                    params = tuple(params)
+                return self.cursor.execute(query, params)
+            # Si on n'a pas de paramètres, on envoie un tuple vide (Turso préfère ça)
+            return self.cursor.execute(query, ())
+        except Exception as e:
+            st.error(f"Erreur SQL détaillée : {type(e).__name__} - {e}")
+            st.info(f"Requête : {query}")
+            raise e # On relance l'erreur pour ne pas casser le reste
     def __getattr__(self, name):
         return getattr(self.cursor, name)
 

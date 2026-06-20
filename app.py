@@ -237,11 +237,9 @@ def ajouter_evenement_agenda(equipe_id=None, paroisse_id=None, diocese_id=None, 
                 st.success("Événement enregistré avec succès ! ✅")
                 st.rerun()
 
-
-
 def afficher_agenda_complet_universel(equipe_id=None, paroisse_id=None, diocese_id=None):
     """Affiche l'agenda global en fonction du niveau hiérarchique de l'utilisateur."""
-    st.subheader("📋 Planification des agendas (Vue d'ensemble)")
+    st.subheader("📋 Planification des agendas")
     
     aujourd_hui = date.today()
     # ✅ On convertit la date en texte ICI, une bonne fois pour toutes

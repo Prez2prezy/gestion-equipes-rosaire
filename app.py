@@ -746,7 +746,6 @@ if st.session_state['role'] == 'diocese':
                 <b>Bureau diocésain :</b> {d[1]}
             </div>
             ''', unsafe_allow_html=True)                
-                
                 if st.button("Enregistrer"):
                     c.execute("UPDATE diocese SET responsable=?, bureau=? WHERE id=?", (nouveau_resp, nouveau_bureau, 1))
                     commit_and_sync()

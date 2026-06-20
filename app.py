@@ -46,52 +46,29 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-
 # --- Connexion à la base de données (Locale ou Turso Cloud) ---
-import sqlite3
 
-# ✅ ASTUCE : Assistant qui convertit les listes en tuples pour libsql
-class CursorWrapper:
-    def __init__(self, real_cursor):
-        self.cursor = real_cursor
-    def execute(self, query, params=None):
-        if isinstance(params, list):
-            params = tuple(params)
-        if params is not None:
-            return self.cursor.execute(query, params)
-        return self.cursor.execute(query)
-    def __getattr__(self, name):
-        return getattr(self.cursor, name)
+# Variable globale pour vérifier si on utilise le cloud
+USE_TURSO = False
 
-# ✅ MAGIC CODE : Cache la connexion pour ne pas la refaire à chaque clic
-@st.cache_resource
-def init_connection():
-    try:
-        from libsql_experimental import connect as turso_connect
-        TURSO_URL = st.secrets.get("TURSO_URL")
-        TURSO_AUTH_TOKEN = st.secrets.get("TURSO_AUTH_TOKEN")
-        if TURSO_URL and TURSO_AUTH_TOKEN:
-            conn = turso_connect("file:gestion_religieuse.db", sync_url=TURSO_URL, auth_token=TURSO_AUTH_TOKEN)
-            conn.sync() # Ne se fera qu'une seule fois au démarrage de l'app !
-            return conn, True
-    except Exception as e:
-        st.error(f"⚠️ Erreur de connexion à Turso : {type(e).__name__} - {e}")
-        st.info("Bascule automatique en mode local temporaire.")
-    # Mode local de secours
-    return sqlite3.connect('gestion_religieuse.db', check_same_thread=False), False
+try:
+    from libsql_client import connect as turso_connect
+    TURSO_URL = st.secrets.get("TURSO_URL")
+    TURSO_AUTH_TOKEN = st.secrets.get("TURSO_AUTH_TOKEN")
+    if TURSO_URL and TURSO_AUTH_TOKEN:
+        USE_TURSO = True
+except Exception:
+    pass  # Si la librairie n'est pas installée ou pas de secrets, on reste en local
 
-# On initialise la connexion (mise en cache)
-conn, USE_TURSO = init_connection()
-c = CursorWrapper(conn.cursor()) if USE_TURSO else conn.cursor()
-
-# Fonction pour sauvegarder
-def commit_and_sync():
-    conn.commit()
-    if USE_TURSO:
-        try:
-            conn.sync()
-        except Exception as e:
-            st.error(f"Erreur de synchronisation cloud : {e}")
+if USE_TURSO:
+    # Connexion Cloud (Turso) en mode HTTP (plus stable sur Streamlit Cloud)
+    # Attention : on utilise TURSO_URL directement, pas de fichier local
+    conn = turso_connect(TURSO_URL, auth_token=TURSO_AUTH_TOKEN)
+    c = conn.cursor()
+else:
+    # Connexion Locale classique (pour votre PC)
+    conn = sqlite3.connect('gestion_religieuse.db', check_same_thread=False)
+    c = conn.cursor()
 
 # --- Configuration de Cloudinary (Stockage Photos Cloud) ---
 

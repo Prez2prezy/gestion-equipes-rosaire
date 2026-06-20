@@ -18,6 +18,7 @@ import cloudinary.uploader
 # --- Configuration de la page ---
 st.set_page_config(page_title="Gestionnaire des Équipes du Rosaire - Diocèse de Grand-Bassam", layout="wide")
 
+
 # --- CSS personnalisé ---
 st.markdown("""
 <style>
@@ -43,14 +44,26 @@ st.markdown("""
         background-color: #128C7E;
         color: white !important;
     }
+
+    /* ✅ RÈGLES POUR LES PETITS ÉCRANS (TÉLÉPHONES) */
+    @media (max-width: 768px) {
+        /* Force le titre principal à rester sur une seule ligne */
+        .stMarkdown h1 {
+            white-space: nowrap !important;
+            font-size: 1.3rem !important; /* Réduit la taille sur mobile */
+        }
+        /* Réduit la taille des sous-titres */
+        .stMarkdown h2 {
+            font-size: 1.1rem !important;
+        }
+        /* Réduit un peu la taille du texte normal */
+        .stMarkdown p, .stText {
+            font-size: 0.9rem !important;
+        }
+    }
 </style>
 """, unsafe_allow_html=True)
 
-
-
-
-# --- Connexion à la base de données (Locale ou Turso Cloud) ---
-import sqlite3
 
 # ✅ ASTUCE : Assistant qui convertit les listes en tuples pour libsql
 class CursorWrapper:

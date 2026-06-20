@@ -737,7 +737,7 @@ if st.session_state['role'] == 'diocese':
 
     # Voir diocèse
     if menu == "Voir diocèse":
-        st.markdown('<h2 style="color:#1A237E;font-size: 1.4rem;">🏛️ DIOCÈSE DE GRAND-BASSAM</h2>', unsafe_allow_html=True)
+        st.markdown('<h2 style="color:#1A237E; font-size: 1.4rem;">🏛️ DIOCÈSE DE GRAND-BASSAM</h2>', unsafe_allow_html=True)
         d = c.execute("SELECT responsable, bureau FROM diocese WHERE id=?", (1,)).fetchone()
         if d:
             st.markdown(f'''
@@ -745,13 +745,17 @@ if st.session_state['role'] == 'diocese':
                 <b>Responsable diocésain :</b> {d[0]}<br>
                 <b>Bureau diocésain :</b> {d[1]}
             </div>
-            ''', unsafe_allow_html=True)                
+            ''', unsafe_allow_html=True)
+            
+            with st.expander("✏️ Modifier"):
+                nouveau_resp = st.text_input("Nouveau responsable", value=d[0])
+                nouveau_bureau = st.text_area("Nouveau bureau", value=d[1])
                 if st.button("Enregistrer"):
                     c.execute("UPDATE diocese SET responsable=?, bureau=? WHERE id=?", (nouveau_resp, nouveau_bureau, 1))
                     commit_and_sync()
                     st.success("Mis à jour !")
                     st.rerun()
-    
+
     # Créer paroisses
     elif menu == "Créer paroisses":
         st.markdown('<h2 style="color:#1A237E;">🏘️ Créer paroisses</h2>', unsafe_allow_html=True)

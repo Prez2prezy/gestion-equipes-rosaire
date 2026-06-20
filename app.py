@@ -1556,7 +1556,7 @@ elif st.session_state['role'] == 'paroisse':
                     # Affichage des membres de l'équipe
                     if st.session_state.get('show_membres_equipe_par') == eq_id:
                         st.markdown("---")
-                        st.markdown(f"#### 👤 Membres de {eq_nom}")
+                        st.markdown(f"#### 👤 Membres - {eq_nom}")
                         membres_eq = c.execute("""
                             SELECT m.id, m.matricule, m.nom, m.prenom, m.whatsapp, m.numero_meditation, m.date_adhesion
                             FROM membres m
@@ -1653,7 +1653,7 @@ elif st.session_state['role'] == 'paroisse':
         
     # Membres (Paroisse) - Version fluidifiée avec gestion unique
     elif menu == "Membres":
-        st.markdown(f'<h2 style="color:#1A237E;">👤 Membres de {nom_paroisse}</h2>', unsafe_allow_html=True)
+        st.markdown(f'<h2 style="color:#1A237E;">👤 Membres - {nom_paroisse}</h2>', unsafe_allow_html=True)
         
         # Initialisation des états
         if 'open_form_par' not in st.session_state:
@@ -2150,7 +2150,7 @@ elif st.session_state['role'] == 'equipe':
 
     # Mes membres (Équipe) - Version fluidifiée
     elif menu == "Mes membres":
-        st.markdown(f'<h2 style="color:#1A237E;">👤 Membres de {nom_equipe}</h2>', unsafe_allow_html=True)
+        st.markdown(f'<h2 style="color:#1A237E;">👤 Membres - {nom_equipe}</h2>', unsafe_allow_html=True)
         
         # Initialisation des états
         if 'open_form_eq' not in st.session_state:

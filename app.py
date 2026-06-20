@@ -740,11 +740,13 @@ if st.session_state['role'] == 'diocese':
         st.markdown('<h2 style="color:#1A237E;font-size: 1.4rem;">🏛️ DIOCÈSE DE GRAND-BASSAM</h2>', unsafe_allow_html=True)
         d = c.execute("SELECT responsable, bureau FROM diocese WHERE id=?", (1,)).fetchone()
         if d:
-            st.write(f"**Responsable diocésain :** {d[0]}")
-            st.write(f"**Bureau diocésain :** {d[1]}")
-            with st.expander("✏️ Modifier"):
-                nouveau_resp = st.text_input("Nouveau responsable", value=d[0])
-                nouveau_bureau = st.text_area("Nouveau bureau", value=d[1])
+            st.markdown(f'''
+            <div style="font-size: 0.9rem; color: #1A237E;">
+                <b>Responsable diocésain :</b> {d[0]}<br>
+                <b>Bureau diocésain :</b> {d[1]}
+            </div>
+            ''', unsafe_allow_html=True)                
+                
                 if st.button("Enregistrer"):
                     c.execute("UPDATE diocese SET responsable=?, bureau=? WHERE id=?", (nouveau_resp, nouveau_bureau, 1))
                     commit_and_sync()
@@ -1401,11 +1403,15 @@ elif st.session_state['role'] == 'paroisse':
         st.markdown(f'<h2 style="color:#1A237E; font-size: 1.4rem;">🏘️ {nom_paroisse}</h2>', unsafe_allow_html=True)
         p = c.execute("SELECT commune, ville, responsable, bureau FROM paroisses WHERE id=?", (pid,)).fetchone()
         if p:
-            st.write(f"Commune : {p[0]}")
-            st.write(f"Ville : {p[1]}")
-            st.write(f"**Responsable :** {p[2]}")
-            st.write(f"**Bureau :** {p[3]}")
-            
+            st.markdown(f'''
+            <div style="font-size: 0.9rem; color: #1A237E;">
+                Commune : {p[0]}<br>
+                Ville : {p[1]}<br>
+                <b>Responsable :</b> {p[2]}<br>
+                <b>Bureau :</b> {p[3]}
+            </div>
+            ''', unsafe_allow_html=True)
+        
             # ✅ Ajout du bouton de modification
             with st.expander("✏️ Modifier les informations"):
                 nouveau_respo = st.text_input("Nouveau responsable", value=p[2] or "")
@@ -2127,9 +2133,14 @@ elif st.session_state['role'] == 'equipe':
         # ... (la suite de votre code)
         st.markdown(f'<h2 style="color:#1A237E; font-size: 1.4rem;">👥 {nom_equipe}</h2>', unsafe_allow_html=True)
         eq = c.execute("SELECT responsable, bureau FROM equipes WHERE id=?", (eid,)).fetchone()
+
         if eq:
-            st.write(f"**Responsable :** {eq[0]}")
-            st.write(f"**Bureau :** {eq[1]}")
+            st.markdown(f'''
+            <div style="font-size: 0.9rem; color: #1A237E;">
+                <b>Responsable :</b> {eq[0]}<br>
+                <b>Bureau :</b> {eq[1]}
+            </div>
+            ''', unsafe_allow_html=True)
             nb = c.execute("SELECT COUNT(*) FROM membres WHERE equipe_id=? AND statut='actif'", (eid,)).fetchone()[0]
             st.metric("Effectif", f"{nb}/10")
             

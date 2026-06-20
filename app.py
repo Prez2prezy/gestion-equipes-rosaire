@@ -12,6 +12,7 @@ import io
 import csv
 from io import StringIO
 import urllib.parse
+import time # ✅ Nécessaire pour faire une pause d'une seconde
 import cloudinary
 import cloudinary.uploader
 
@@ -80,25 +81,33 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ✅ ASTUCE : Assistant qui convertit les listes en tuples pour libsql
+# ✅ ASTUCE : Assistant qui gère les tuples, les doublons et les erreurs réseau
 class CursorWrapper:
     def __init__(self, real_cursor):
         self.cursor = real_cursor
     def execute(self, query, params=None):
-        try:
-            if params is not None:
-                if isinstance(params, list):
-                    params = tuple(params)
-                return self.cursor.execute(query, params)
-            return self.cursor.execute(query, ())
-        except Exception as e:
-            # On ignore silencieusement les erreurs de colonnes existantes
-            if "duplicate column name" in str(e):
-                pass
-            else:
-                st.error(f"Erreur SQL détaillée : {type(e).__name__} - {e}")
-                st.info(f"Requête : {query}")
-            raise e
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                if params is not None:
+                    if isinstance(params, list):
+                        params = tuple(params)
+                    return self.cursor.execute(query, params)
+                return self.cursor.execute(query, ())
+            except Exception as e:
+                error_msg = str(e).lower()
+                # 1. Si c'est une erreur réseau (connexion coupée)
+                if "connection reset by peer" in error_msg or "connection error" in error_msg or "os error 104" in error_msg:
+                    if attempt < max_retries - 1:
+                        time.sleep(1) # On attend 1 seconde
+                        continue      # Et on réessaye !
+                # 2. Si c'est juste une colonne qui existe déjà
+                if "duplicate column name" in error_msg:
+                    pass
+                else:
+                    st.error(f"Erreur SQL détaillée : {type(e).__name__} - {e}")
+                    st.info(f"Requête : {query}")
+                raise e
     def __getattr__(self, name):
         return getattr(self.cursor, name)
 

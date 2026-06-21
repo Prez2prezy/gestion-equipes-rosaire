@@ -519,7 +519,7 @@ def archiver_membre(membre_id, situation, annee_debut, annee_fin, commentaire, a
     c.execute('''INSERT INTO archives (membre_id, situation, date_debut, date_fin, commentaire,
                  auteur_id, auteur_nom, auteur_role, paroisse_id, equipe_id)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-              (membre_id, situation, date_debut_obj, date_fin_obj, commentaire,
+              (membre_id, situation, date_debut_obj.isoformat(), date_fin_obj.isoformat(), commentaire,
                auteur_id, auteur_nom, auteur_role, paroisse_id, equipe_id))
     commit_and_sync()  # On utilise la fonction de sauvegarde unifiée
     return True

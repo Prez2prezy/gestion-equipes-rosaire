@@ -1335,7 +1335,7 @@ if st.session_state['role'] == 'diocese':
             afficher_agenda_complet_universel(diocese_id=1)
 
         with tab_passe:
-            st.subheader("📊 Historique des présences (Lecture seule)")
+            st.subheader("📊 Historique des présences")
             paroisses = c.execute("SELECT id, nom FROM paroisses").fetchall()
             if paroisses:
                 par_dict = {p[1]: p[0] for p in paroisses}
@@ -2070,7 +2070,7 @@ elif st.session_state['role'] == 'paroisse':
             afficher_agenda_complet_universel(paroisse_id=pid)
 
         with tab_passe:
-            st.subheader("📊 Historique des présences (Lecture seule)")
+            st.subheader("📊 Historique des présences")
             equipes = c.execute("SELECT id, nom_equipe FROM equipes WHERE paroisse_id=?", (pid,)).fetchall()
             if equipes:
                 eq_dict = {eq[1]: eq[0] for eq in equipes}

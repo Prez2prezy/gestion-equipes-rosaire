@@ -48,8 +48,8 @@ st.markdown("""
         color: white !important;
     }
 
-    /* TITRE PRINCIPAL (h1) */
-    .stMarkdown h1 {
+    /* TITRE PRINCIPAL (h1) - L'étoile * force toutes les sous-balises à obéir */
+    .stMarkdown h1, .stMarkdown h1 * {
         color: #1A237E !important;
         white-space: nowrap !important;
         overflow: hidden !important;
@@ -63,13 +63,27 @@ st.markdown("""
         font-size: 1.4rem !important;
     }
 
-    /* ✅ SOUS-TITRES (h3) - Pour "Vos évènements" et "Planification" */
-    .stMarkdown h3 {
+    /* SOUS-TITRES (h3) */
+    .stMarkdown h3, .stMarkdown h3 * {
         color: #1A237E !important;
         white-space: nowrap !important;
         overflow: hidden !important;
         text-overflow: ellipsis !important;
-        font-size: clamp(0.9rem, 2vw, 1.3rem) !important;
+        font-size: clamp(0.8rem, 4vw, 1.2rem) !important;
+        margin-bottom: 15px !important;
+    }
+    
+    /* BLOC D'INFORMATIONS */
+    .custom-info-box {
+        font-size: 0.9rem;
+        color: #1A237E;
+        margin-bottom: 40px !important; /* ✅ Encore plus d'espace en dessous */
+        line-height: 1.6;
+    }
+
+    /* ✅ Donne de l'air au bouton "Modifier" (expanders) */
+    .streamlit-expander {
+        margin-top: 20px !important;
     }
     
     /* RÈGLES POUR LES PETITS ÉCRANS */
@@ -80,6 +94,7 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
+
 
 # ✅ ASTUCE : Assistant qui gère les tuples, les doublons et les erreurs réseau
 class CursorWrapper:
@@ -2151,27 +2166,26 @@ elif st.session_state['role'] == 'equipe':
         st.markdown(f'<h2 style="color:#1A237E; font-size: 1.4rem;">👥 {nom_equipe}</h2>', unsafe_allow_html=True)
         eq = c.execute("SELECT responsable, bureau FROM equipes WHERE id=?", (eid,)).fetchone()
         if eq:
+            nb = c.execute("SELECT COUNT(*) FROM membres WHERE equipe_id=? AND statut='actif'", (eid,)).fetchone()[0]
             st.markdown(f'''
             <div class="custom-info-box">
                 <b>Responsable :</b> {eq[0]}<br>
-                <b>Bureau :</b> {eq[1]}
+                <b>Bureau :</b> {eq[1]}<br>
+                <b>Effectif :</b> {nb}/10 membres
             </div>
             ''', unsafe_allow_html=True)
-            nb = c.execute("SELECT COUNT(*) FROM membres WHERE equipe_id=? AND statut='actif'", (eid,)).fetchone()[0]
-            st.metric("Effectif", f"{nb}/10")
-
-            # ✅ Ajout du bouton de modification
+            
             with st.expander("✏️ Modifier les informations"):
-                nouveau_respo = st.text_input("Nouveau responsable", value=eq[0] or "")
+                nouveau_resp = st.text_input("Nouveau responsable", value=eq[0] or "")
                 nouveau_bureau = st.text_area("Nouveau bureau", value=eq[1] or "")
                 if st.button("💾 Enregistrer les modifications", key="update_equipe"):
-                    if nouveau_respo:
-                        c.execute("UPDATE equipes SET responsable=?, bureau=? WHERE id=?", (nouveau_respo, nouveau_bureau, eid))
+                    if nouveau_resp:
+                        c.execute("UPDATE equipes SET responsable=?, bureau=? WHERE id=?", (nouveau_resp, nouveau_bureau, eid))
                         commit_and_sync()
                         st.success("Informations de l'équipe mises à jour ! ✅")
                         st.rerun()
                     else:
-                        st.error("Le nom du responsable est obligatoire.")    
+                        st.error("Le nom du responsable est obligatoire.")
 
     # Mes membres (Équipe) - Version fluidifiée
     elif menu == "Mes membres":

@@ -3,7 +3,7 @@ import sqlite3
 from datetime import date, timedelta
 import os
 import hashlib
-import random
+import randomès
 import string
 from PIL import Image
 import shutil
@@ -1561,7 +1561,7 @@ elif st.session_state['role'] == 'paroisse':
             # Affichage des informations de la nouvelle équipe
             if st.session_state.get('new_equipe_info'):
                 info = st.session_state['new_equipe_info']
-                st.success(f"✅ Équipe '{info['nom']}' créée avec succès !")
+                st.success(f"✅'{info['nom']}' créée avec succès !")
                 st.markdown(f"""
                 <div style='background-color: #e8f5e9; padding: 15px; border-radius: 10px; margin-top: 10px;'>
                     <strong>🔑 Identifiant :</strong> <code>{info['identifiant']}</code><br>

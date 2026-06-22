@@ -427,7 +427,7 @@ def widget_type_abonnement(key_prefix, membre_id, annee_debut):
     """Widget pour choisir le type d'abonnement. Retourne (type, montant)."""
     type_abo = st.radio("Type", ["📝 Abonnement", "🔄 Réabonnement"],
                         key=f"type_{key_prefix}_{membre_id}_{annee_debut}", horizontal=True)
-    montant = st.number_input("Montant (FCFA)", min_value=0, value=5000, step=500,
+    montant = st.number_input("Montant (FCFA)", min_value=0, value=1000, step=500,
                               key=f"mont_{key_prefix}_{membre_id}_{annee_debut}")
     type_str = "abonnement" if "Abonnement" in type_abo else "reabonnement"
     return type_str, montant

@@ -260,16 +260,16 @@ def supprimer_photo(photo_path):
 
 
 def ajouter_evenement_agenda(equipe_id=None, paroisse_id=None, diocese_id=None, auteur_nom="Système"):
-    """Formulaire d'ajout d'un événement."""
-    st.subheader("📅 Vos événements à venir")
+    """Formulaire d'ajout d'un évènement."""
+    st.subheader("📅 Vos évènements à venir")
     
     prefix = f"ag_{equipe_id}_{paroisse_id}_{diocese_id}"
     
-    with st.expander("➕ Ajouter / Enregistrer un événement à l'agenda"):
+    with st.expander("➕ Ajouter / Enregistrer un évènement à l'agenda"):
         with st.form(f"ajout_agenda_{prefix}"):
             col1, col2 = st.columns(2)
             with col1:
-                date_agenda = st.date_input("📅 Date de l'événement", value=date.today() + timedelta(days=7), min_value=date.today(), key=f"date_ag_{prefix}")
+                date_agenda = st.date_input("📅 Date de l'évènement", value=date.today() + timedelta(days=7), min_value=date.today(), key=f"date_ag_{prefix}")
             with col2:
                 type_agenda = st.selectbox("⛪ Type", ["Prière mensuelle", "Prière commune", "Prière spéciale", "Pèlerinage", "Réunion", "Autre"], key=f"type_ag_{prefix}")
             lieu_agenda = st.text_input("📍 Lieu", key=f"lieu_ag_{prefix}")
@@ -280,7 +280,7 @@ def ajouter_evenement_agenda(equipe_id=None, paroisse_id=None, diocese_id=None, 
                              VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
                           (equipe_id, paroisse_id, diocese_id, date_agenda, type_agenda, lieu_agenda, desc_agenda, auteur_nom))
                 commit_and_sync()
-                st.success("Événement enregistré avec succès ! ✅")
+                st.success("évènement enregistré avec succès ! ✅")
                 st.rerun()
 
 def afficher_agenda_complet_universel(equipe_id=None, paroisse_id=None, diocese_id=None):
@@ -300,35 +300,35 @@ def afficher_agenda_complet_universel(equipe_id=None, paroisse_id=None, diocese_
     # Construction des conditions pour voir les enfants et les parents
     conditions = []
     if equipe_id:
-        # 1. Les événements de l'équipe elle-même
+        # 1. Les évènements de l'équipe elle-même
         conditions.append("equipe_id = ?")
         params.append(equipe_id)
-        # 2. Les événements de sa paroisse parente
+        # 2. Les évènements de sa paroisse parente
         pid = c.execute("SELECT paroisse_id FROM equipes WHERE id=?", (equipe_id,)).fetchone()
         if pid and pid[0]:
             conditions.append("(paroisse_id = ? AND equipe_id IS NULL)")
             params.append(pid[0])
-        # 3. Les événements du diocèse
+        # 3. Les évènements du diocèse
         conditions.append("(diocese_id = 1 AND paroisse_id IS NULL AND equipe_id IS NULL)")
         
     elif paroisse_id:
-        # 1. Les événements de la paroisse elle-même
+        # 1. Les évènements de la paroisse elle-même
         conditions.append("(paroisse_id = ? AND equipe_id IS NULL)")
         params.append(paroisse_id)
-        # 2. Les événements de ses équipes enfants
+        # 2. Les évènements de ses équipes enfants
         conditions.append("equipe_id IN (SELECT id FROM equipes WHERE paroisse_id = ?)")
         params.append(paroisse_id)
-        # 3. Les événements du diocèse
+        # 3. Les évènements du diocèse
         conditions.append("(diocese_id = 1 AND paroisse_id IS NULL AND equipe_id IS NULL)")
         
     elif diocese_id:
-        # 1. Les événements créés par le diocèse lui-même
+        # 1. Les évènements créés par le diocèse lui-même
         conditions.append("(diocese_id = ? AND paroisse_id IS NULL AND equipe_id IS NULL)")
         params.append(diocese_id)
-        # 2. Les événements créés par les paroisses du diocèse
+        # 2. Les évènements créés par les paroisses du diocèse
         conditions.append("paroisse_id IN (SELECT id FROM paroisses WHERE diocese_id = ?)")
         params.append(diocese_id)
-        # 3. Les événements créés par les équipes du diocèse
+        # 3. Les évènements créés par les équipes du diocèse
         conditions.append("equipe_id IN (SELECT id FROM equipes WHERE paroisse_id IN (SELECT id FROM paroisses WHERE diocese_id = ?))")
         params.append(diocese_id)
     
@@ -391,7 +391,7 @@ def afficher_agenda_complet_universel(equipe_id=None, paroisse_id=None, diocese_
                         commit_and_sync()
                         st.rerun()
     else:
-        st.info("Aucun événement à venir pour le moment.")
+        st.info("Aucun évènement à venir pour le moment.")
 
 def afficher_agenda(equipe_id):
     """Affiche l'agenda à venir d'une équipe (lecture seule)."""
@@ -420,7 +420,7 @@ def afficher_agenda(equipe_id):
                 if item_lieu: st.write(f"📍 **Lieu :** {item_lieu}")
                 if item_desc: st.write(f"📝 **Détails :** {item_desc}")
     else:
-        st.info("Aucun événement à venir pour cette équipe.")
+        st.info("Aucun évènement à venir pour cette équipe.")
 
 # ✅ Widget centralisé pour le choix abonnement/réabonnement
 def widget_type_abonnement(key_prefix, membre_id, annee_debut):
@@ -2569,9 +2569,9 @@ elif st.session_state['role'] == 'equipe':
                 with st.expander("📝 Enregistrer / Modifier une séance", expanded=False):
                     col_sel1, col_sel2, col_sel3 = st.columns(3)
                     with col_sel1:
-                        date_event = st.date_input("📅 Date de l'événement", value=date.today(), key="date_suivi_eq")
+                        date_event = st.date_input("📅 Date de l'évènement", value=date.today(), key="date_suivi_eq")
                     with col_sel2:
-                        type_event = st.selectbox("⛪ Type d'événement", types_evenements, key="type_suivi_eq")
+                        type_event = st.selectbox("⛪ Type d'évènement", types_evenements, key="type_suivi_eq")
                     with col_sel3:
                         lieu_event = st.text_input("📍 Lieu de la rencontre", key="lieu_suivi_eq")
                     
@@ -2630,7 +2630,7 @@ elif st.session_state['role'] == 'equipe':
 
             st.markdown("---")
             st.subheader("📊 Historique et Statistiques")
-            filtre_type = st.selectbox("Filtrer par type d'événement", ["Tous"] + ["Prière mensuelle", "Prière commune", "Prière spéciale", "Pèlerinage"], key="filtre_hist_eq")
+            filtre_type = st.selectbox("Filtrer par type d'évènement", ["Tous"] + ["Prière mensuelle", "Prière commune", "Prière spéciale", "Pèlerinage"], key="filtre_hist_eq")
             afficher_historique_suivi(eid, filtre_type) 
         
     # WhatsApp

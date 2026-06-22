@@ -354,7 +354,7 @@ def afficher_agenda_complet_universel(equipe_id=None, paroisse_id=None, diocese_
             if item_eid:
                 eq_info = c.execute("SELECT e.nom_equipe, p.nom FROM equipes e JOIN paroisses p ON e.paroisse_id = p.id WHERE e.id=?", (item_eid,)).fetchone()
                 if eq_info:
-                    source = f"👥 Équipe {eq_info[0]} ({eq_info[1]})"
+                    source = f"👥 {eq_info[0]} ({eq_info[1]})"
             elif item_pid:
                 par_info = c.execute("SELECT nom FROM paroisses WHERE id=?", (item_pid,)).fetchone()
                 if par_info:

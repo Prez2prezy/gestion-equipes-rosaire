@@ -289,7 +289,7 @@ def afficher_agenda_complet_universel(equipe_id=None, paroisse_id=None, diocese_
     
     aujourd_hui = date.today()
     # ✅ On convertit la date en texte ICI, une bonne fois pour toutes
-    aujourdhui_str = aujourd_hui
+    aujourdhui_str = aujourd_hui.isoformat()
     
     query = '''SELECT id, date_event, type_event, lieu, description, auteur_nom,
                       equipe_id, paroisse_id, diocese_id

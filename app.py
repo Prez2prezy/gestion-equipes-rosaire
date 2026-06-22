@@ -96,7 +96,42 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-# ✅ ASTUCE : Assistant qui gère les tuples, les doublons et les erreurs réseau
+
+
+# --- Connexion à la base de données (Locale ou Turso Cloud) ---
+USE_TURSO = False
+TURSO_URL = None
+TURSO_AUTH_TOKEN = None
+
+try:
+    from libsql_experimental import connect as turso_connect
+    TURSO_URL = st.secrets.get("TURSO_URL")
+    TURSO_AUTH_TOKEN = st.secrets.get("TURSO_AUTH_TOKEN")
+    if TURSO_URL and TURSO_AUTH_TOKEN:
+        USE_TURSO = True
+except Exception:
+    pass
+
+def create_connection():
+    """Crée une nouvelle connexion."""
+    if USE_TURSO:
+        url_https = TURSO_URL.replace("libsql://", "https://")
+        return turso_connect(url_https, auth_token=TURSO_AUTH_TOKEN)
+    else:
+        return sqlite3.connect('gestion_religieuse.db', check_same_thread=False)
+
+@st.cache_resource
+def init_connection():
+    """Initialise la connexion une seule fois et la met en cache."""
+    try:
+        conn = create_connection()
+        return conn, USE_TURSO
+    except Exception as e:
+        st.error(f"⚠️ Erreur de connexion à Turso : {e}")
+        return sqlite3.connect('gestion_religieuse.db', check_same_thread=False), False
+
+conn, USE_TURSO = init_connection()
+
 class CursorWrapper:
     def __init__(self, real_cursor):
         self.cursor = real_cursor
@@ -111,11 +146,15 @@ class CursorWrapper:
                 return self.cursor.execute(query, ())
             except Exception as e:
                 error_msg = str(e).lower()
-                # 1. Si c'est une erreur réseau (connexion coupée)
-                if "connection reset by peer" in error_msg or "connection error" in error_msg or "os error 104" in error_msg:
+                # 1. Si la connexion est morte (stream not found) ou coupée
+                if "stream not found" in error_msg or "connection reset" in error_msg or "os error 104" in error_msg:
                     if attempt < max_retries - 1:
-                        time.sleep(1) # On attend 1 seconde
-                        continue      # Et on réessaye !
+                        time.sleep(1)
+                        # ✅ MAGIE : On force la recréation de la connexion globale
+                        global conn
+                        conn = create_connection()
+                        self.cursor = conn.cursor()
+                        continue # On réessaye avec la nouvelle connexion
                 # 2. Si c'est juste une colonne qui existe déjà
                 if "duplicate column name" in error_msg:
                     pass
@@ -126,32 +165,10 @@ class CursorWrapper:
     def __getattr__(self, name):
         return getattr(self.cursor, name)
 
-# ✅ Cache la connexion pour ne pas la refaire à chaque clic
-@st.cache_resource
-def init_connection():
-    try:
-        from libsql_experimental import connect as turso_connect
-        TURSO_URL = st.secrets.get("TURSO_URL")
-        TURSO_AUTH_TOKEN = st.secrets.get("TURSO_AUTH_TOKEN")
-        if TURSO_URL and TURSO_AUTH_TOKEN:
-            # Connexion Cloud (Turso) en mode 100% distant (HTTP)
-            # On remplace libsql:// par https://
-            url_https = TURSO_URL.replace("libsql://", "https://")
-            conn = turso_connect(url_https, auth_token=TURSO_AUTH_TOKEN)
-            return conn, True
-    except Exception as e:
-        st.error(f"⚠️ Erreur de connexion à Turso : {type(e).__name__} - {e}")
-        st.info("Bascule automatique en mode local temporaire.")
-    return sqlite3.connect('gestion_religieuse.db', check_same_thread=False), False
-
-# On initialise la connexion (mise en cache)
-conn, USE_TURSO = init_connection()
 c = CursorWrapper(conn.cursor()) if USE_TURSO else conn.cursor()
 
-# Fonction pour sauvegarder
 def commit_and_sync():
     conn.commit()
-    # En mode distant, commit() envoie directement les données. Pas besoin de sync().
 
 
 # --- Configuration de Cloudinary (Stockage Photos Cloud) ---

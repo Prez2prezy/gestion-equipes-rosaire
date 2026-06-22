@@ -3,7 +3,7 @@ import sqlite3
 from datetime import date, timedelta
 import os
 import hashlib
-import randomès
+import random
 import string
 from PIL import Image
 import shutil

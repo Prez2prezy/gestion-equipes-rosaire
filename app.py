@@ -410,7 +410,7 @@ def widget_type_abonnement(key_prefix, membre_id, annee_debut):
     """Widget pour choisir le type d'abonnement. Retourne (type, montant)."""
     type_abo = st.radio("Type", ["📝 Abonnement", "🔄 Réabonnement"],
                         key=f"type_{key_prefix}_{membre_id}_{annee_debut}", horizontal=True)
-    montant = st.number_input("Montant (FCFA)", min_value=0, value=1000, step=500,
+    montant = st.number_input("Montant (FCFA)", min_value=0, value=3500, step=500,
                               key=f"mont_{key_prefix}_{membre_id}_{annee_debut}")
     type_str = "abonnement" if "Abonnement" in type_abo else "reabonnement"
     return type_str, montant
@@ -2403,7 +2403,7 @@ elif st.session_state['role'] == 'equipe':
     elif menu == "Abonnements":
         st.markdown(f'<h2 style="color:#1A237E;">💰 Gestion des abonnements - {nom_equipe}</h2>', unsafe_allow_html=True)
         annee_debut = st.number_input("Année de début de la période", min_value=2020,
-                                       max_value=date.today().year + 1, value=date.today().year, step=1)
+                                       max_value=date.today().year, value=date.today().year-1, step=1)
         st.write(f"**Période :** {periode_affichage(annee_debut)}")
         membres = c.execute("SELECT id, nom, prenom, matricule FROM membres WHERE equipe_id=? AND statut='actif' ORDER BY nom",
                             (eid,)).fetchall()
@@ -2454,8 +2454,8 @@ elif st.session_state['role'] == 'equipe':
                     # ✅ CORRECTION : On force la conversion en 'int' pour éviter l'erreur de type numérique
                     montant_actuel = int(abo_info[1]) if abo_info[1] is not None else 0
                     
-                    new_montant = st.number_input("Montant (FCFA)", min_value=0, 
-                                                   value=montant_actuel, step=500, key=f"mod_mont_{mod_id}")
+                    new_montant = st.number_input("Montant (FCFA)", min_value=3500, 
+                                                   value=montant_actuel, step=1500, key=f"mod_mont_{mod_id}")
                     
                     col1, col2, col3 = st.columns(3)
                     with col1:

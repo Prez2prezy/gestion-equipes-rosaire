@@ -278,7 +278,7 @@ def ajouter_evenement_agenda(equipe_id=None, paroisse_id=None, diocese_id=None, 
             if st.form_submit_button("📅 Enregistrer dans l'agenda", use_container_width=True):
                 c.execute('''INSERT INTO agenda (equipe_id, paroisse_id, diocese_id, date_event, type_event, lieu, description, auteur_nom) 
                              VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
-                          (equipe_id, paroisse_id, diocese_id, date_agenda, type_agenda, lieu_agenda, desc_agenda, auteur_nom))
+                          (equipe_id, paroisse_id, diocese_id, date_agenda.isoformat(), type_agenda, lieu_agenda, desc_agenda, auteur_nom))
                 commit_and_sync()
                 st.success("évènement enregistré avec succès ! ✅")
                 st.rerun()

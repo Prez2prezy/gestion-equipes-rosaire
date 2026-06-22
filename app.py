@@ -7,7 +7,7 @@ import random
 import string
 from PIL import Image
 import shutil
-import pandas as pdnowrap
+import pandas as pd
 import io
 import csv
 from io import StringIO
@@ -410,7 +410,7 @@ def widget_type_abonnement(key_prefix, membre_id, annee_debut):
     """Widget pour choisir le type d'abonnement. Retourne (type, montant)."""
     type_abo = st.radio("Type", ["📝 Abonnement", "🔄 Réabonnement"],
                         key=f"type_{key_prefix}_{membre_id}_{annee_debut}", horizontal=True)
-    montant = st.number_input("Montant (FCFA)", min_value=0, value=3500, step=500,
+    montant = st.number_input("Montant (FCFA)", min_value=0, value=1000, step=500,
                               key=f"mont_{key_prefix}_{membre_id}_{annee_debut}")
     type_str = "abonnement" if "Abonnement" in type_abo else "reabonnement"
     return type_str, montant
@@ -519,7 +519,7 @@ def archiver_membre(membre_id, situation, annee_debut, annee_fin, commentaire, a
     c.execute('''INSERT INTO archives (membre_id, situation, date_debut, date_fin, commentaire,
                  auteur_id, auteur_nom, auteur_role, paroisse_id, equipe_id)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-              (membre_id, situation, date_debut_obj.isoformat(), date_fin_obj.isoformat(), commentaire,
+              (membre_id, situation, date_debut_obj, date_fin_obj, commentaire,
                auteur_id, auteur_nom, auteur_role, paroisse_id, equipe_id))
     commit_and_sync()  # On utilise la fonction de sauvegarde unifiée
     return True
@@ -575,11 +575,11 @@ def lien_whatsapp(numero, message):
 def afficher_anniversaires_whatsapp():
     aujourdhui = date.today()
     anniversaires = c.execute('''
-        SELECT m.id, m.nom, m.prenom, m.whatsapp, e.nom_equipe, p.nom as paroisse, m.date_naissance
+        SELECT m.id, m.nom, m.prenom, m.whatsapp, e.nom_equipe, p.nom as paroisse, m.date_naissance.isoformat()
         FROM membres m
         JOIN equipes e ON m.equipe_id = e.id
         JOIN paroisses p ON m.paroisse_id = p.id
-        WHERE m.statut='actif' AND strftime('%m-%d', m.date_naissance) = ?
+        WHERE m.statut='actif' AND strftime('%m-%d', m.date_naissance.isoformat()) = ?
         ORDER BY m.nom
     ''', (aujourdhui.strftime('%m-%d'),)).fetchall()
     if anniversaires:
@@ -649,7 +649,7 @@ def exporter_excel_diocese():
         if equipes:
             df = pd.DataFrame(equipes, columns=["ID", "Nom équipe", "Responsable", "Bureau", "Paroisse", "Max membres"])
             df.to_excel(writer, sheet_name="Equipes", index=False)
-        membres = c.execute('''SELECT m.matricule, m.nom, m.prenom, m.date_naissance, m.whatsapp, m.date_adhesion,
+        membres = c.execute('''SELECT m.matricule, m.nom, m.prenom, m.date_naissance.isoformat(), m.whatsapp, m.date_adhesion.isoformat(),
                                       p.nom as paroisse, e.nom_equipe as equipe
                                FROM membres m
                                JOIN paroisses p ON m.paroisse_id = p.id
@@ -684,7 +684,7 @@ def exporter_excel_diocese():
 c.execute('''CREATE TABLE IF NOT EXISTS diocese (id INTEGER PRIMARY KEY, nom TEXT, responsable TEXT, bureau TEXT)''')
 c.execute('''CREATE TABLE IF NOT EXISTS paroisses (id INTEGER PRIMARY KEY, nom TEXT, commune TEXT, ville TEXT, responsable TEXT, bureau TEXT, diocese_id INTEGER)''')
 c.execute('''CREATE TABLE IF NOT EXISTS equipes (id INTEGER PRIMARY KEY, nom_equipe TEXT, responsable TEXT, bureau TEXT, paroisse_id INTEGER, max_membres INTEGER DEFAULT 10)''')
-c.execute('''CREATE TABLE IF NOT EXISTS membres (id INTEGER PRIMARY KEY, matricule TEXT UNIQUE, nom TEXT, prenom TEXT, date_naissance DATE, whatsapp TEXT, date_adhesion DATE, photo_path TEXT, paroisse_id INTEGER, equipe_id INTEGER, statut TEXT DEFAULT 'actif')''')
+c.execute('''CREATE TABLE IF NOT EXISTS membres (id INTEGER PRIMARY KEY, matricule TEXT UNIQUE, nom TEXT, prenom TEXT, date_naissance.isoformat() DATE, whatsapp TEXT, date_adhesion.isoformat() DATE, photo_path TEXT, paroisse_id INTEGER, equipe_id INTEGER, statut TEXT DEFAULT 'actif')''')
 c.execute('''CREATE TABLE IF NOT EXISTS utilisateurs (id INTEGER PRIMARY KEY, username TEXT UNIQUE, password TEXT, role TEXT, diocese_id INTEGER, paroisse_id INTEGER, equipe_id INTEGER)''')
 c.execute('''CREATE TABLE IF NOT EXISTS abonnements (id INTEGER PRIMARY KEY, membre_id INTEGER, annee_debut INTEGER, date_paiement DATE, montant REAL DEFAULT 0, type_abonnement TEXT DEFAULT 'abonnement', statut TEXT DEFAULT 'non_paye')''')
 c.execute('''CREATE TABLE IF NOT EXISTS archives (id INTEGER PRIMARY KEY, membre_id INTEGER, situation TEXT, date_debut DATE, date_fin DATE, commentaire TEXT, auteur_id INTEGER, auteur_nom TEXT, auteur_role TEXT, paroisse_id INTEGER, equipe_id INTEGER)''')
@@ -1335,7 +1335,7 @@ if st.session_state['role'] == 'diocese':
             afficher_agenda_complet_universel(diocese_id=1)
 
         with tab_passe:
-            st.subheader("📊 Historique des présences")
+            st.subheader("📊 Historique des présences (Lecture seule)")
             paroisses = c.execute("SELECT id, nom FROM paroisses").fetchall()
             if paroisses:
                 par_dict = {p[1]: p[0] for p in paroisses}
@@ -1738,14 +1738,14 @@ elif st.session_state['role'] == 'paroisse':
                             with col2:
                                 if st.form_submit_button("✅ Ajouter"):
                                     if nom and prenom:
-                                        existant = c.execute("SELECT id FROM membres WHERE nom=? AND prenom=? AND date_naissance=? AND statut=?", 
+                                        existant = c.execute("SELECT id FROM membres WHERE nom=? AND prenom=? AND date_naissance.isoformat()=? AND statut=?", 
                                                         (nom, prenom, naissance, 'actif')).fetchone()
                                         if existant:
                                             st.error("Ce membre existe déjà actif.")
                                         else:
                                             matricule = generer_matricule_unique()
                                             c.execute("""INSERT INTO membres 
-                                                (matricule, nom, prenom, date_naissance, whatsapp, date_adhesion, paroisse_id, equipe_id, statut, numero_meditation) 
+                                                (matricule, nom, prenom, date_naissance.isoformat(), whatsapp, date_adhesion, paroisse_id, equipe_id, statut, numero_meditation) 
                                                 VALUES (?,?,?,?,?,?,?,?,?,?)""",
                                                 (matricule, nom, prenom, naissance, whatsapp, date_adhesion, pid, eid, 'actif', numero_meditation))
                                             mid = c.lastrowid
@@ -1941,7 +1941,7 @@ elif st.session_state['role'] == 'paroisse':
     
     # Abonnements (Paroisse) - Version hiérarchisée comme Diocèse
     elif menu == "Abonnements":
-        st.markdown(f'<h2 style="color:#1A237E;">💰 Gestion des abonnements-{nom_paroisse}</h2>', unsafe_allow_html=True)
+        st.markdown(f'<h2 style="color:#1A237E;">💰 Gestion des abonnements - {nom_paroisse}</h2>', unsafe_allow_html=True)
         
         # Initialisation des états
         if 'show_equipe_abos_par' not in st.session_state:
@@ -2070,7 +2070,7 @@ elif st.session_state['role'] == 'paroisse':
             afficher_agenda_complet_universel(paroisse_id=pid)
 
         with tab_passe:
-            st.subheader("📊 Historique des présences")
+            st.subheader("📊 Historique des présences (Lecture seule)")
             equipes = c.execute("SELECT id, nom_equipe FROM equipes WHERE paroisse_id=?", (pid,)).fetchall()
             if equipes:
                 eq_dict = {eq[1]: eq[0] for eq in equipes}
@@ -2102,7 +2102,7 @@ elif st.session_state['role'] == 'paroisse':
     # Export Excel
     elif menu == "Export Excel":
         st.markdown(f'<h2 style="color:#1A237E;">📊 Export des membres de {nom_paroisse}</h2>', unsafe_allow_html=True)
-        membres = c.execute('''SELECT m.matricule, m.nom, m.prenom, m.date_naissance, m.whatsapp, m.date_adhesion, e.nom_equipe
+        membres = c.execute('''SELECT m.matricule, m.nom, m.prenom, m.date_naissance.isoformat(), m.whatsapp, m.date_adhesion.isoformat(), e.nom_equipe
                                FROM membres m
                                JOIN equipes e ON m.equipe_id = e.id
                                WHERE m.paroisse_id = ? AND m.statut='actif'
@@ -2234,7 +2234,7 @@ elif st.session_state['role'] == 'equipe':
                         with col2:
                             if st.form_submit_button("✅ Ajouter"):
                                 if nom and prenom:
-                                    existant = c.execute("SELECT id FROM membres WHERE nom=? AND prenom=? AND date_naissance=? AND statut=?", 
+                                    existant = c.execute("SELECT id FROM membres WHERE nom=? AND prenom=? AND date_naissance.isoformat()=? AND statut=?", 
                                                     (nom, prenom, naissance, 'actif')).fetchone()
                                     if existant:
                                         st.error("Membre déjà actif")
@@ -2242,7 +2242,7 @@ elif st.session_state['role'] == 'equipe':
                                         matricule = generer_matricule_unique()
                                         paroisse_id = c.execute("SELECT paroisse_id FROM equipes WHERE id=?", (eid,)).fetchone()[0]
                                         c.execute("""INSERT INTO membres 
-                                            (matricule, nom, prenom, date_naissance, whatsapp, date_adhesion, paroisse_id, equipe_id, statut, numero_meditation) 
+                                            (matricule, nom, prenom, date_naissance.isoformat(), whatsapp, date_adhesion.isoformat(), paroisse_id, equipe_id, statut, numero_meditation) 
                                             VALUES (?,?,?,?,?,?,?,?,?,?)""",
                                             (matricule, nom, prenom, naissance, whatsapp, date_adhesion, paroisse_id, eid, 'actif', numero_meditation))
                                         mid = c.lastrowid
@@ -2403,7 +2403,7 @@ elif st.session_state['role'] == 'equipe':
     elif menu == "Abonnements":
         st.markdown(f'<h2 style="color:#1A237E;">💰 Gestion des abonnements - {nom_equipe}</h2>', unsafe_allow_html=True)
         annee_debut = st.number_input("Année de début de la période", min_value=2020,
-                                       max_value=date.today().year, value=date.today().year-1, step=1)
+                                       max_value=date.today().year + 1, value=date.today().year, step=1)
         st.write(f"**Période :** {periode_affichage(annee_debut)}")
         membres = c.execute("SELECT id, nom, prenom, matricule FROM membres WHERE equipe_id=? AND statut='actif' ORDER BY nom",
                             (eid,)).fetchall()
@@ -2454,8 +2454,8 @@ elif st.session_state['role'] == 'equipe':
                     # ✅ CORRECTION : On force la conversion en 'int' pour éviter l'erreur de type numérique
                     montant_actuel = int(abo_info[1]) if abo_info[1] is not None else 0
                     
-                    new_montant = st.number_input("Montant (FCFA)", min_value=3500, 
-                                                   value=montant_actuel, step=1500, key=f"mod_mont_{mod_id}")
+                    new_montant = st.number_input("Montant (FCFA)", min_value=0, 
+                                                   value=montant_actuel, step=500, key=f"mod_mont_{mod_id}")
                     
                     col1, col2, col3 = st.columns(3)
                     with col1:

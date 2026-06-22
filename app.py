@@ -21,7 +21,6 @@ st.set_page_config(page_title="Gestionnaire des Équipes du Rosaire - Diocèse d
 
 
 
-
 # --- CSS personnalisé ---
 st.markdown("""
 <style>
@@ -48,7 +47,7 @@ st.markdown("""
         color: white !important;
     }
 
-    /* TITRE PRINCIPAL (h1) - L'étoile * force toutes les sous-balises à obéir */
+    /* TITRE PRINCIPAL (h1) */
     .stMarkdown h1, .stMarkdown h1 * {
         color: #1A237E !important;
         white-space: nowrap !important;
@@ -77,13 +76,24 @@ st.markdown("""
     .custom-info-box {
         font-size: 0.9rem;
         color: #1A237E;
-        margin-bottom: 40px !important; /* ✅ Encore plus d'espace en dessous */
+        margin-bottom: 40px !important;
         line-height: 1.6;
     }
 
-    /* ✅ Donne de l'air au bouton "Modifier" (expanders) */
+    /* Donne de l'air au bouton "Modifier" (expanders) */
     .streamlit-expander {
         margin-top: 20px !important;
+    }
+
+    /* ✅ RÉDUIRE LA TAILLE DES INDICATEURS (st.metric) */
+    [data-testid="stMetricLabel"] {
+        font-size: 0.9rem !important;
+    }
+    [data-testid="stMetricValue"] {
+        font-size: 1.3rem !important;
+    }
+    [data-testid="stMetricDelta"] {
+        font-size: 0.8rem !important;
     }
     
     /* RÈGLES POUR LES PETITS ÉCRANS */
@@ -94,8 +104,6 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
-
-
 
 
 # --- Connexion à la base de données (Locale ou Turso Cloud) ---

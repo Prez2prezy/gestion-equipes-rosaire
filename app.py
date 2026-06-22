@@ -2234,8 +2234,8 @@ elif st.session_state['role'] == 'equipe':
                         with col2:
                             if st.form_submit_button("✅ Ajouter"):
                                 if nom and prenom:
-                                    existant = c.execute("SELECT id FROM membres WHERE nom=? AND prenom=? AND date_naissance.isoformat()=? AND statut=?", 
-                                                    (nom, prenom, naissance, 'actif')).fetchone()
+                                    existant = c.execute("SELECT id FROM membres WHERE nom=? AND prenom=? AND date_naissance=? AND statut=?",
+                                                   (nom, prenom, naissance.isoformat(), 'actif')).fetchone()
                                     if existant:
                                         st.error("Membre déjà actif")
                                     else:

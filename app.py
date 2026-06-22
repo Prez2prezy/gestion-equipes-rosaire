@@ -289,7 +289,7 @@ def afficher_agenda_complet_universel(equipe_id=None, paroisse_id=None, diocese_
     
     aujourd_hui = date.today()
     # ✅ On convertit la date en texte ICI, une bonne fois pour toutes
-    aujourdhui_str = aujourd_hui.isoformat()
+    aujourdhui_str = aujourd_hui
     
     query = '''SELECT id, date_event, type_event, lieu, description, auteur_nom,
                       equipe_id, paroisse_id, diocese_id
@@ -592,7 +592,7 @@ def lien_whatsapp(numero, message):
 def afficher_anniversaires_whatsapp():
     aujourdhui = date.today()
     anniversaires = c.execute('''
-        SELECT m.id, m.nom, m.prenom, m.whatsapp, e.nom_equipe, p.nom as paroisse, m.date_naissance.isoformat()
+        SELECT m.id, m.nom, m.prenom, m.whatsapp, e.nom_equipe, p.nom as paroisse, m.date_naissance
         FROM membres m
         JOIN equipes e ON m.equipe_id = e.id
         JOIN paroisses p ON m.paroisse_id = p.id
@@ -666,7 +666,7 @@ def exporter_excel_diocese():
         if equipes:
             df = pd.DataFrame(equipes, columns=["ID", "Nom équipe", "Responsable", "Bureau", "Paroisse", "Max membres"])
             df.to_excel(writer, sheet_name="Equipes", index=False)
-        membres = c.execute('''SELECT m.matricule, m.nom, m.prenom, m.date_naissance.isoformat(), m.whatsapp, m.date_adhesion.isoformat(),
+        membres = c.execute('''SELECT m.matricule, m.nom, m.prenom, m.date_naissance, m.whatsapp, m.date_adhesion,
                                       p.nom as paroisse, e.nom_equipe as equipe
                                FROM membres m
                                JOIN paroisses p ON m.paroisse_id = p.id
@@ -1755,16 +1755,16 @@ elif st.session_state['role'] == 'paroisse':
                             with col2:
                                 if st.form_submit_button("✅ Ajouter"):
                                     if nom and prenom:
-                                        existant = c.execute("SELECT id FROM membres WHERE nom=? AND prenom=? AND date_naissance.isoformat()=? AND statut=?", 
-                                                        (nom, prenom, naissance, 'actif')).fetchone()
+                                        existant = c.execute("SELECT id FROM membres WHERE nom=? AND prenom=? AND date_naissance=? AND statut=?", 
+                                                        (nom, prenom, naissance.isoformat(), 'actif')).fetchone()
                                         if existant:
                                             st.error("Ce membre existe déjà actif.")
                                         else:
                                             matricule = generer_matricule_unique()
                                             c.execute("""INSERT INTO membres 
-                                                (matricule, nom, prenom, date_naissance.isoformat(), whatsapp, date_adhesion, paroisse_id, equipe_id, statut, numero_meditation) 
+                                                (matricule, nom, prenom, date_naissance, whatsapp, date_adhesion, paroisse_id, equipe_id, statut, numero_meditation) 
                                                 VALUES (?,?,?,?,?,?,?,?,?,?)""",
-                                                (matricule, nom, prenom, naissance, whatsapp, date_adhesion, pid, eid, 'actif', numero_meditation))
+                                                (matricule, nom, prenom, naissance.isoformat(), whatsapp, date_adhesion.isoformat(), pid, eid, 'actif', numero_meditation))
                                             mid = c.lastrowid
                                             if photo:
                                                 chemin = sauvegarder_photo(photo, matricule)
@@ -2119,7 +2119,7 @@ elif st.session_state['role'] == 'paroisse':
     # Export Excel
     elif menu == "Export Excel":
         st.markdown(f'<h2 style="color:#1A237E;">📊 Export des membres de {nom_paroisse}</h2>', unsafe_allow_html=True)
-        membres = c.execute('''SELECT m.matricule, m.nom, m.prenom, m.date_naissance.isoformat(), m.whatsapp, m.date_adhesion.isoformat(), e.nom_equipe
+        membres = c.execute('''SELECT m.matricule, m.nom, m.prenom, m.date_naissance, m.whatsapp, m.date_adhesion, e.nom_equipe
                                FROM membres m
                                JOIN equipes e ON m.equipe_id = e.id
                                WHERE m.paroisse_id = ? AND m.statut='actif'

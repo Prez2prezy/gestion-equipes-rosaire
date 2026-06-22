@@ -554,11 +554,11 @@ def enregistrer_abonnement(membre_id, annee_debut, montant=0, type_abonnement='a
     existant = c.execute("SELECT id FROM abonnements WHERE membre_id=? AND annee_debut=?", (membre_id, annee_debut)).fetchone()
     if existant:
         c.execute("UPDATE abonnements SET date_paiement=?, montant=?, type_abonnement=?, statut='paye' WHERE id=?",
-                  (date_paiement, montant, type_abonnement, existant[0]))
+                  (date_paiement.isoformat(), montant, type_abonnement, existant[0]))
     else:
         c.execute('''INSERT INTO abonnements (membre_id, annee_debut, date_paiement, montant, type_abonnement, statut)
                      VALUES (?, ?, ?, ?, ?, ?)''',
-                  (membre_id, annee_debut, date_paiement, montant, type_abonnement, 'paye'))
+                  (membre_id, annee_debut, date_paiement.isoformat(), montant, type_abonnement, 'paye'))
     commit_and_sync()
 
 def verifier_abonnement(membre_id, annee_debut):

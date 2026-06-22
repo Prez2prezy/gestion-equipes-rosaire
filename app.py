@@ -7,7 +7,7 @@ import random
 import string
 from PIL import Image
 import shutil
-import pandas as pd
+import pandas as pdnowrap
 import io
 import csv
 from io import StringIO
@@ -1941,7 +1941,7 @@ elif st.session_state['role'] == 'paroisse':
     
     # Abonnements (Paroisse) - Version hiérarchisée comme Diocèse
     elif menu == "Abonnements":
-        st.markdown(f'<h2 style="color:#1A237E;white-space: nowrap;">💰 Gestion des abonnements - {nom_paroisse}</h2>', unsafe_allow_html=True)
+        st.markdown(f'<h2 style="color:#1A237E;white-space: nowrap;overflow:hidden;text-overflow: ellipsis;">💰 Gestion des abonnements - {nom_paroisse}</h2>', unsafe_allow_html=True)
         
         # Initialisation des états
         if 'show_equipe_abos_par' not in st.session_state:

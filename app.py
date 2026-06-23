@@ -1071,7 +1071,7 @@ if st.session_state['role'] == 'diocese':
             st.session_state['abos_view_type'] = None  # 'equipes' ou 'membres'
         
         annee_debut = st.number_input("Année de début de la période", min_value=2020, max_value=date.today().year, value=date.today().year-1, step=1)
-        periode_aff = f"Sept {annee_debut} – Sept {annee_debut+1}"
+        periode_aff = f"Sept {annee_debut-1} – Sept {annee_debut}"
         st.write(f"**Période :** {periode_aff}")
         
         # Statistiques générales
@@ -1973,7 +1973,7 @@ elif st.session_state['role'] == 'paroisse':
             st.session_state['show_equipe_abos_par'] = None
         
         annee_debut = st.number_input("Année de début de la période", min_value=2020, max_value=date.today().year, value=date.today().year-1, step=1)
-        periode_aff = f"Sept {annee_debut} – Sept {annee_debut+1}"
+        periode_aff = f"Sept {annee_debut-1} – Sept {annee_debut}"
         st.write(f"**Période :** {periode_aff}")
         
         # Statistiques de la paroisse
@@ -2427,8 +2427,7 @@ elif st.session_state['role'] == 'equipe':
     # Abonnements
     elif menu == "Abonnements":
         st.markdown(f'<h2 style="color:#1A237E;">💰 Gestion des abonnements - {nom_equipe}</h2>', unsafe_allow_html=True)
-        annee_debut = st.number_input("Année de début de la période", min_value=2020,
-                                       max_value=date.today().year + 1, value=date.today().year, step=1)
+        annee_debut = st.number_input("Année de début de la période", min_value=2020, max_value=date.today().year, value=date.today().year-1, step=1)
         st.write(f"**Période :** {periode_affichage(annee_debut)}")
         membres = c.execute("SELECT id, nom, prenom, matricule FROM membres WHERE equipe_id=? AND statut='actif' ORDER BY nom",
                             (eid,)).fetchall()

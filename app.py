@@ -1423,17 +1423,19 @@ if st.session_state['role'] == 'diocese':
                 date_debut = safe_date(a[4])
                 date_fin = safe_date(a[5])
                 duree = (date_fin - date_debut).days // 365 if date_debut and date_fin else 0
-                date_fin_str = date_fin.strftime('%d/%m/%Y') if date_fin else "?"
                 
-                with st.expander(f"{icone} {a[1]} {a[2]} ({a[0]}) – {situation_affichee} – {date_fin_str}"):
-                    st.write(f"Ajouté par : {a[9]}") # Index 9 pour le diocèse
+                # ✅ NOUVEAU TITRE EXACT COMME DEMANDÉ
+                header = f"{icone} {a[1]} {a[2]} ({a[0]}) – {situation_affichee}"
+                if date_debut and date_fin:
+                    header += f" – a médité {duree} an(s) avec nous - Sept {date_debut.year} – Sept {date_fin.year}"
+                
+                with st.expander(header):
+                    st.write(f"Ajouté par : {a[9]}")
                     st.write(f"Paroisse : {a[7]}")
                     st.write(f"Équipe : {a[8]}")
-                    if date_debut and date_fin:
-                        st.write(f"Période : Sept {date_debut.year} – Sept {date_fin.year} ({duree} an(s))")
                     if a[6]:
                         st.write(f"Commentaire : {a[6]}")
-
+    
     # Réinitialisation totale
     elif menu == "🗑️ Réinitialiser tout":
         st.markdown('<h2 style="color:#1A237E;">🗑️ RÉINITIALISATION COMPLÈTE</h2>', unsafe_allow_html=True)
@@ -2148,8 +2150,6 @@ elif st.session_state['role'] == 'paroisse':
             st.warning("Aucun membre actif")
 
 
-
-    
     # Archives (lecture seule)
     elif menu == "📦 Archives":
         st.markdown(f'<h2 style="color:#1A237E; font-size: 1.4rem;">📦 Archives - {nom_paroisse}</h2>', unsafe_allow_html=True)
@@ -2161,27 +2161,30 @@ elif st.session_state['role'] == 'paroisse':
             LEFT JOIN equipes e ON a.equipe_id = e.id
             WHERE a.paroisse_id = ? OR e.paroisse_id = ?
             ORDER BY a.date_fin DESC
-        ''', (pid, pid)).fetchall()        
+        ''', (pid, pid)).fetchall()
+        
         if not archives:
             st.info("Aucune archive pour cette paroisse")
         else:
             for a in archives:
                 situation_affichee = afficher_situation(a[3])
                 icone = {"Déplacé": "📤", "Radié": "🚫", "Défunt": "🕊️"}.get(a[3], "📌")
+                
                 date_debut = safe_date(a[4])
                 date_fin = safe_date(a[5])
                 duree = (date_fin - date_debut).days // 365 if date_debut and date_fin else 0
-                date_fin_str = date_fin.strftime('%d/%m/%Y') if date_fin else "?"
-                with st.expander(f"{icone} {a[1]} {a[2]} ({a[0]}) – {situation_affichee} – {date_fin_str}"):
-                    st.write(f"Ajouté par : {a[8]}") # Index 8 pour la paroisse
+                
+                # ✅ NOUVEAU TITRE EXACT COMME DEMANDÉ
+                header = f"{icone} {a[1]} {a[2]} ({a[0]}) – {situation_affichee}"
+                if date_debut and date_fin:
+                    header += f" – a médité {duree} an(s) avec nous - Sept {date_debut.year} – Sept {date_fin.year}"
+                
+                with st.expander(header):
+                    # ✅ INDEX CORRIGÉS ICI
+                    st.write(f"Ajouté par : {a[8]}") 
                     st.write(f"Équipe : {a[7]}")
-                    if date_debut and date_fin:
-                        st.write(f"Période : Sept {date_debut.year} – Sept {date_fin.year} a médité ({duree} an(s)) avec nous")
                     if a[6]:
                         st.write(f"Commentaire : {a[6]}")
-
-
-
 
 # ==================== ÉQUIPE ====================
 elif st.session_state['role'] == 'equipe':
@@ -2706,7 +2709,7 @@ elif st.session_state['role'] == 'equipe':
                             st.rerun()
         
         if archives_equipe:
-            st.subheader("✏️ Gérer les archives de votre équipe")
+            st.subheader("✏️ Gérer les archives de mon équipe")
             for arch in archives_equipe:
                 arch_id, nom, prenom, matricule, situation, date_debut_raw, date_fin_raw, commentaire, membre_id = arch
                 try:

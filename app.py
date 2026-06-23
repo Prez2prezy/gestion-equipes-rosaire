@@ -2176,7 +2176,7 @@ elif st.session_state['role'] == 'paroisse':
                     st.write(f"Paroisse : {a[7]}")
                     st.write(f"Équipe : {a[8]}")
                     if date_debut and date_fin:
-                        st.write(f"Période : Oct {date_debut.year} – Oct {date_fin.year} ({duree} an(s))")
+                        st.write(f"Période : Sept {date_debut.year} – Sept {date_fin.year} ({duree} an(s))")
 
 
 # ==================== ÉQUIPE ====================

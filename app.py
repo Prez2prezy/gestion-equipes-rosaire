@@ -2160,17 +2160,13 @@ elif st.session_state['role'] == 'paroisse':
             for a in archives:
                 situation_affichee = afficher_situation(a[3])
                 icone = {"Déplacé": "📤", "Radié": "🚫", "Défunt": "🕊️"}.get(a[3], "📌")
-                
                 # ✅ On convertit les textes en vraies dates Python
                 date_debut = safe_date(a[4])
                 date_fin = safe_date(a[5])
-                
                 # Calcul de la durée
                 duree = (date_fin - date_debut).days // 365 if date_debut and date_fin else 0
-                
                 # Formatage de la date de fin pour l'affichage
                 date_fin_str = date_fin.strftime('%d/%m/%Y') if date_fin else "?"
-                
                 with st.expander(f"{icone} {a[1]} {a[2]} ({a[0]}) – {situation_affichee} – {date_fin_str}"):
                     st.write(f"Ajouté par : {a[9]}")
                     st.write(f"Paroisse : {a[7]}")

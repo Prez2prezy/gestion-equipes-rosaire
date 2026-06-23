@@ -1475,10 +1475,10 @@ if st.session_state['role'] == 'diocese':
 elif st.session_state['role'] == 'paroisse':
     pid = st.session_state['paroisse_id']
     nom_paroisse = c.execute("SELECT nom FROM paroisses WHERE id=?", (pid,)).fetchone()[0]
-    menu = st.sidebar.radio("Navigation", ["Ma paroisse", "Mes équipes", "Membres", "📊 Statistiques", "📅 Abonnements", "📌 Suivi", "💬 WhatsApp", "📊 Export Excel", "📦 Archives"])
+    menu = st.sidebar.radio("Navigation", ["Ma paroisse", "👥 Mes équipes", "👤 Membres", "📊 Statistiques", "📅 Abonnements", "📌 Suivi", "💬 WhatsApp", "📊 Export Excel", "📦 Archives"])
     
     # Ma paroisse
-    if menu == "Ma paroisse":
+    if menu == "🏘️ Ma paroisse":
         st.markdown(f'<h2 style="color:#1A237E; font-size: 1.4rem;">🏘️ {nom_paroisse}</h2>', unsafe_allow_html=True)
         p = c.execute("SELECT commune, ville, responsable, bureau FROM paroisses WHERE id=?", (pid,)).fetchone()      
         if p:
@@ -1505,7 +1505,7 @@ elif st.session_state['role'] == 'paroisse':
                         st.error("Le nom du responsable est obligatoire.")
 
     # Mes équipes (Paroisse) - Version avec vérification renforcée
-    elif menu == "Mes équipes":
+    elif menu == "👥 Mes équipes":
         st.markdown(f'<h2 style="color:#1A237E;">👥 Équipes de {nom_paroisse}</h2>', unsafe_allow_html=True)
         
         # Initialisation des états
@@ -1735,7 +1735,7 @@ elif st.session_state['role'] == 'paroisse':
                                 st.code(f"Nouveau mot de passe : {nouveau_mdp}", language="text")    
         
     # Membres (Paroisse) - Version fluidifiée avec gestion unique
-    elif menu == "Membres":
+    elif menu == "👤 Membres":
         st.markdown(f'<h2 style="color:#1A237E;">👤 Membres - {nom_paroisse}</h2>', unsafe_allow_html=True)
         
         # Initialisation des états
@@ -2252,7 +2252,7 @@ elif st.session_state['role'] == 'equipe':
                         st.error("Le nom du responsable est obligatoire.")
 
     # Mes membres (Équipe) - Version fluidifiée
-    elif menu == "Mes membres":
+    elif menu == "👤 Mes membres":
         st.markdown(f'<h2 style="color:#1A237E;">👤 Membres - {nom_equipe}</h2>', unsafe_allow_html=True)
         
         # Initialisation des états

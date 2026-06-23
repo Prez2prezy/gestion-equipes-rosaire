@@ -2150,6 +2150,8 @@ elif st.session_state['role'] == 'paroisse':
             st.warning("Aucun membre actif")
 
 
+
+    
     # Archives (lecture seule)
     elif menu == "📦 Archives":
         st.markdown(f'<h2 style="color:#1A237E; font-size: 1.4rem;">📦 Archives - {nom_paroisse}</h2>', unsafe_allow_html=True)
@@ -2185,6 +2187,9 @@ elif st.session_state['role'] == 'paroisse':
                     st.write(f"Équipe : {a[7]}")
                     if a[6]:
                         st.write(f"Commentaire : {a[6]}")
+
+
+
 
 # ==================== ÉQUIPE ====================
 elif st.session_state['role'] == 'equipe':

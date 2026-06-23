@@ -787,7 +787,7 @@ st.markdown("---")
 # ==================== DIOCÈSE ====================
 if st.session_state['role'] == 'diocese':
     # Après (supprimer "📊 Export Excel")
-    menu = st.sidebar.radio("Navigation", ["Voir diocèse", "Créer paroisses", "Gérer paroisses", "Rechercher par matricule", "Gérer les accès", "Statistiques", "📅 Abonnements", "📌 Suivi", "💬 WhatsApp", "📦 Archives", "🗑️ Réinitialiser tout"])
+    menu = st.sidebar.radio("Navigation", ["Voir diocèse", "Créer paroisses", "Gérer paroisses", "Rechercher par matricule", "Gérer les accès", "📊 Statistiques", "📅 Abonnements", "📌 Suivi", "💬 WhatsApp", "📦 Archives", "🗑️ Réinitialiser tout"])
 
     # Voir diocèse
     if menu == "Voir diocèse":
@@ -1048,7 +1048,7 @@ if st.session_state['role'] == 'diocese':
                         st.rerun()
     
     # Statistiques
-    elif menu == "Statistiques":
+    elif menu == "📊 Statistiques":
         st.markdown('<h2 style="color:#1A237E;">📊 Statistiques</h2>', unsafe_allow_html=True)
         nb_p = c.execute("SELECT COUNT(*) FROM paroisses").fetchone()[0]
         nb_e = c.execute("SELECT COUNT(*) FROM equipes").fetchone()[0]
@@ -1475,7 +1475,7 @@ if st.session_state['role'] == 'diocese':
 elif st.session_state['role'] == 'paroisse':
     pid = st.session_state['paroisse_id']
     nom_paroisse = c.execute("SELECT nom FROM paroisses WHERE id=?", (pid,)).fetchone()[0]
-    menu = st.sidebar.radio("Navigation", ["Ma paroisse", "Mes équipes", "Membres", "Statistiques", "Abonnements", "📌 Suivi", "WhatsApp", "Export Excel", "Archives"])
+    menu = st.sidebar.radio("Navigation", ["Ma paroisse", "Mes équipes", "Membres", "📊 Statistiques", "📅 Abonnements", "📌 Suivi", "WhatsApp", "Export Excel", "📦 Archives"])
     
     # Ma paroisse
     if menu == "Ma paroisse":
@@ -1978,7 +1978,7 @@ elif st.session_state['role'] == 'paroisse':
                     st.error(f"Erreur export: {e}")
 
     # Statistiques
-    elif menu == "Statistiques":
+    elif menu == "📊 Statistiques":
         st.markdown(f'<h2 style="color:#1A237E;">📊 Statistiques de {nom_paroisse}</h2>', unsafe_allow_html=True)
         nb_eq = c.execute("SELECT COUNT(*) FROM equipes WHERE paroisse_id=?", (pid,)).fetchone()[0]
         nb_m = c.execute("SELECT COUNT(*) FROM membres WHERE paroisse_id=? AND statut='actif'", (pid,)).fetchone()[0]
@@ -1987,7 +1987,7 @@ elif st.session_state['role'] == 'paroisse':
         col2.metric("Membres actifs", nb_m)
     
     # Abonnements (Paroisse) - Version hiérarchisée comme Diocèse
-    elif menu == "Abonnements":
+    elif menu == "📅 Abonnements":
         st.markdown(f'<h2 style="color:#1A237E;">💰 Gestion des abonnements - {nom_paroisse}</h2>', unsafe_allow_html=True)
         
         # Initialisation des états
@@ -2215,7 +2215,7 @@ elif st.session_state['role'] == 'equipe':
     nom_equipe = equipe_info[0] if equipe_info else "Mon équipe"
     
     menu = st.sidebar.radio("Navigation", [
-        "Mon équipe", "Mes membres", "Abonnements", "📌 Suivi", "WhatsApp", "Archives"])
+        "Mon équipe", "Mes membres", "📅 Abonnements", "📌 Suivi", "WhatsApp", "📦 Archives"])
 
     # ✅ Nettoyage du session_state au changement de menu (pour éviter les formulaires qui restent ouverts)
     if st.session_state.get('last_menu') != menu:
@@ -2464,7 +2464,7 @@ elif st.session_state['role'] == 'equipe':
                 st.error(f"Erreur export: {e}")
     
     # Abonnements
-    elif menu == "Abonnements":
+    elif menu == "📅 Abonnements":
         st.markdown(f'<h2 style="color:#1A237E;">💰 Gestion des abonnements - {nom_equipe}</h2>', unsafe_allow_html=True)
         annee_debut = st.number_input("Année de début de la période", min_value=2020,
                                        max_value=date.today().year + 1, value=date.today().year, step=1)
@@ -2691,7 +2691,7 @@ elif st.session_state['role'] == 'equipe':
             afficher_rappels_reabonnement_whatsapp(annee_rappel, equipe_id=eid)
     
     # Archives
-    elif menu == "Archives":
+    elif menu == "📦 Archives":
         st.markdown(f'<h2 style="color:#1A237E;">📦 Archives - {nom_equipe}</h2>', unsafe_allow_html=True)
         membres_actifs = c.execute("SELECT id, nom, prenom, matricule FROM membres WHERE equipe_id=? AND statut='actif' ORDER BY nom", (eid,)).fetchall()
         archives_equipe = c.execute('''

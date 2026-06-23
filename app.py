@@ -2148,19 +2148,20 @@ elif st.session_state['role'] == 'paroisse':
 
 
 
-    
     # Archives (lecture seule)
     elif menu == "📦 Archives":
         st.markdown(f'<h2 style="color:#1A237E; font-size: 1.4rem;">📦 Archives - {nom_paroisse}</h2>', unsafe_allow_html=True)
+        
+        # ✅ Requête ultra simple sans LEFT JOIN (Turso adore ça)
         archives = c.execute('''
             SELECT m.matricule, m.nom, m.prenom, a.situation, a.date_debut, a.date_fin, a.commentaire,
-                   e.nom_equipe as equipe, a.auteur_nom
+                   a.equipe_id, a.auteur_nom
             FROM archives a
             JOIN membres m ON a.membre_id = m.id
-            LEFT JOIN equipes e ON a.equipe_id = e.id
-            WHERE a.paroisse_id = ? OR e.paroisse_id = ?
+            WHERE a.paroisse_id = ?
             ORDER BY a.date_fin DESC
-        ''', (pid, pid)).fetchall()    
+        ''', (pid,)).fetchall()
+        
         if not archives:
             st.info("Aucune archive pour cette paroisse")
         else:
@@ -2172,19 +2173,23 @@ elif st.session_state['role'] == 'paroisse':
                 date_fin = safe_date(a[5])
                 duree = (date_fin - date_debut).days // 365 if date_debut and date_fin else 0
                 
-                # ✅ NOUVEAU TITRE EXACT COMME DEMANDÉ
+                # ✅ On retrouve le nom de l'équipe en Python (très robuste)
+                eq_nom = "N/A"
+                if a[7]:
+                    eq_info = c.execute("SELECT nom_equipe FROM equipes WHERE id=?", (a[7],)).fetchone()
+                    if eq_info:
+                        eq_nom = eq_info[0]
+                
+                # ✅ Nouveau titre propre
                 header = f"{icone} {a[1]} {a[2]} ({a[0]}) – {situation_affichee}"
                 if date_debut and date_fin:
                     header += f" – a médité {duree} an(s) avec nous - Sept {date_debut.year} – Sept {date_fin.year}"
                 
                 with st.expander(header):
-                    # ✅ INDEX CORRIGÉS ICI
-                    st.write(f"Ajouté par : {a[8]}") 
-                    st.write(f"Équipe : {a[7]}")
+                    st.write(f"Ajouté par : {a[8] or 'Inconnu'}")
+                    st.write(f"Équipe : {eq_nom}")
                     if a[6]:
                         st.write(f"Commentaire : {a[6]}")
-
-
 
 
 # ==================== ÉQUIPE ====================

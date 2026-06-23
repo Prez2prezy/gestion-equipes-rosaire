@@ -1400,10 +1400,10 @@ if st.session_state['role'] == 'diocese':
         else:
             excel_file = exporter_excel_diocese()
             st.download_button("📥 Télécharger l'export Excel", data=excel_file, file_name=f"export_rosaire_{date.today()}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-    
+
     # Archives (consultation seule)
     elif menu == "📦 Archives":
-        st.markdown('<h2 style="color:#1A237E;">📦  Archives - diocèse</h2>', unsafe_allow_html=True)
+        st.markdown('<h2 style="color:#1A237E; font-size: 1.4rem;">📦 Archives du diocèse</h2>', unsafe_allow_html=True)
         archives = c.execute('''
             SELECT m.matricule, m.nom, m.prenom, a.situation, a.date_debut, a.date_fin, a.commentaire,
                    p.nom as paroisse, e.nom_equipe as equipe, a.auteur_nom
@@ -1418,17 +1418,22 @@ if st.session_state['role'] == 'diocese':
         else:
             for a in archives:
                 situation_affichee = afficher_situation(a[3])
-                icone = {"Déplacé":"📤","Radié":"🚫","Défunt":"🕊️"}.get(a[3],"📌")
-                duree = (date.fromisoformat(a[5]) - date.fromisoformat(a[4])).days // 365 if a[4] and a[5] else 0
-                with st.expander(f"{icone} {a[1]} {a[2]} ({a[0]}) – {situation_affichee} – {a[5]}"):
-                    st.write(f"Ajouté par : {a[9]}")
+                icone = {"Déplacé": "📤", "Radié": "🚫", "Défunt": "🕊️"}.get(a[3], "📌")
+                
+                date_debut = safe_date(a[4])
+                date_fin = safe_date(a[5])
+                duree = (date_fin - date_debut).days // 365 if date_debut and date_fin else 0
+                date_fin_str = date_fin.strftime('%d/%m/%Y') if date_fin else "?"
+                
+                with st.expander(f"{icone} {a[1]} {a[2]} ({a[0]}) – {situation_affichee} – {date_fin_str}"):
+                    st.write(f"Ajouté par : {a[9]}") # Index 9 pour le diocèse
                     st.write(f"Paroisse : {a[7]}")
                     st.write(f"Équipe : {a[8]}")
-                    if a[4] and a[5]:
-                        st.write(f"Période : Sept {a[4].year} – Sept {a[5].year} ({duree} an(s))")
+                    if date_debut and date_fin:
+                        st.write(f"Période : Oct {date_debut.year} – Oct {date_fin.year} ({duree} an(s))")
                     if a[6]:
                         st.write(f"Commentaire : {a[6]}")
-    
+
     # Réinitialisation totale
     elif menu == "🗑️ Réinitialiser tout":
         st.markdown('<h2 style="color:#1A237E;">🗑️ RÉINITIALISATION COMPLÈTE</h2>', unsafe_allow_html=True)
@@ -2141,10 +2146,11 @@ elif st.session_state['role'] == 'paroisse':
             st.download_button("📥 Télécharger Excel", data=output, file_name=f"membres_{nom_paroisse}_{date.today()}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         else:
             st.warning("Aucun membre actif")
-    
+
+
     # Archives (lecture seule)
-    elif menu == "Archives":
-        st.markdown(f'<h2 style="color:#1A237E;">📦  Archives - paroisse {nom_paroisse}</h2>', unsafe_allow_html=True)
+    elif menu == "📦 Archives":
+        st.markdown(f'<h2 style="color:#1A237E; font-size: 1.4rem;">📦 Archives - {nom_paroisse}</h2>', unsafe_allow_html=True)
         archives = c.execute('''
             SELECT m.matricule, m.nom, m.prenom, a.situation, a.date_debut, a.date_fin, a.commentaire,
                    e.nom_equipe as equipe, a.auteur_nom
@@ -2160,20 +2166,19 @@ elif st.session_state['role'] == 'paroisse':
             for a in archives:
                 situation_affichee = afficher_situation(a[3])
                 icone = {"Déplacé": "📤", "Radié": "🚫", "Défunt": "🕊️"}.get(a[3], "📌")
-                # ✅ On convertit les textes en vraies dates Python
+                
                 date_debut = safe_date(a[4])
                 date_fin = safe_date(a[5])
-                # Calcul de la durée
                 duree = (date_fin - date_debut).days // 365 if date_debut and date_fin else 0
-                # Formatage de la date de fin pour l'affichage
                 date_fin_str = date_fin.strftime('%d/%m/%Y') if date_fin else "?"
+                
                 with st.expander(f"{icone} {a[1]} {a[2]} ({a[0]}) – {situation_affichee} – {date_fin_str}"):
-                    st.write(f"Ajouté par : {a[9]}")
-                    st.write(f"Paroisse : {a[7]}")
-                    st.write(f"Équipe : {a[8]}")
+                    st.write(f"Ajouté par : {a[8]}") # Index 8 pour la paroisse
+                    st.write(f"Équipe : {a[7]}")
                     if date_debut and date_fin:
-                        st.write(f"Période : Sept {date_debut.year} – Sept {date_fin.year} ({duree} an(s))")
-
+                        st.write(f"Période : Oct {date_debut.year} – Oct {date_fin.year} ({duree} an(s))")
+                    if a[6]:
+                        st.write(f"Commentaire : {a[6]}")
 
 # ==================== ÉQUIPE ====================
 elif st.session_state['role'] == 'equipe':

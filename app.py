@@ -1025,7 +1025,6 @@ if st.session_state['role'] == 'diocese':
                         col2.image(m[6], width=100)
                     except:
                         pass
-
             else:
                 st.error("Non trouvé ou membre archivé")
     
@@ -1351,14 +1350,12 @@ if st.session_state['role'] == 'diocese':
     elif menu == "📌 Suivi":
         st.markdown('<h2 style="color:#1A237E;">📌 Suivi et Agenda - Diocèse</h2>', unsafe_allow_html=True)
         tab_avenir, tab_passe = st.tabs(["📅 Agenda - A venir", "📝 Séances réalisées"])
-
         with tab_avenir:
             # Formulaire d'ajout
             ajouter_evenement_agenda(diocese_id=1, auteur_nom=st.session_state['username'])
             st.markdown("---")
             # Vue globale (Diocèse + Toutes Paroisses + Toutes Équipes)
             afficher_agenda_complet_universel(diocese_id=1)
-
         with tab_passe:
             st.subheader("📊 Historique des présences")
             paroisses = c.execute("SELECT id, nom FROM paroisses").fetchall()
@@ -2163,8 +2160,7 @@ elif st.session_state['role'] == 'paroisse':
             LEFT JOIN equipes e ON a.equipe_id = e.id
             WHERE a.paroisse_id = ? OR e.paroisse_id = ?
             ORDER BY a.date_fin DESC
-        ''', (pid, pid)).fetchall()
-        
+        ''', (pid, pid)).fetchall()    
         if not archives:
             st.info("Aucune archive pour cette paroisse")
         else:

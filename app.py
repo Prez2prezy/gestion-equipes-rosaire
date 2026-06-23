@@ -2685,7 +2685,7 @@ elif st.session_state['role'] == 'equipe':
                             paroisse_id = c.execute("SELECT paroisse_id FROM equipes WHERE id=?", (eid,)).fetchone()[0]
                             c.execute('''INSERT INTO archives (membre_id, situation, date_debut, date_fin, commentaire, auteur_id, auteur_nom, auteur_role, paroisse_id, equipe_id)
                                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                                      (membre_choisi[0], situation, date_debut_obj, date_fin_obj, commentaire,
+                                      (membre_choisi[0], situation, date_debut_obj.isoformat(), date_fin_obj.isoformat(), commentaire,
                                        st.session_state['user_id'], st.session_state['username'], 'equipe', paroisse_id, eid))
                             commit_and_sync()
                             st.success(f"✅ {membre_choisi[1]} {membre_choisi[2]} archivé.")

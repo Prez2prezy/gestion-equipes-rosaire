@@ -1475,7 +1475,7 @@ if st.session_state['role'] == 'diocese':
 elif st.session_state['role'] == 'paroisse':
     pid = st.session_state['paroisse_id']
     nom_paroisse = c.execute("SELECT nom FROM paroisses WHERE id=?", (pid,)).fetchone()[0]
-    menu = st.sidebar.radio("Navigation", ["Ma paroisse", "Mes équipes", "Membres", "📊 Statistiques", "📅 Abonnements", "📌 Suivi", "WhatsApp", "Export Excel", "📦 Archives"])
+    menu = st.sidebar.radio("Navigation", ["Ma paroisse", "Mes équipes", "Membres", "📊 Statistiques", "📅 Abonnements", "📌 Suivi", "💬 WhatsApp", "Export Excel", "📦 Archives"])
     
     # Ma paroisse
     if menu == "Ma paroisse":
@@ -2131,7 +2131,7 @@ elif st.session_state['role'] == 'paroisse':
                 st.info("Aucune équipe créée.")
 
     # WhatsApp
-    elif menu == "WhatsApp":
+    elif menu == "💬 WhatsApp":
         st.markdown(f'<h2 style="color:#1A237E;">💬 Messages WhatsApp - {nom_paroisse}</h2>', unsafe_allow_html=True)
         tab1, tab2 = st.tabs(["🎂 Anniversaires", "📢 Rappels réabonnement"])
         with tab1:
@@ -2215,7 +2215,7 @@ elif st.session_state['role'] == 'equipe':
     nom_equipe = equipe_info[0] if equipe_info else "Mon équipe"
     
     menu = st.sidebar.radio("Navigation", [
-        "Mon équipe", "Mes membres", "📅 Abonnements", "📌 Suivi", "WhatsApp", "📦 Archives"])
+        "Mon équipe", "Mes membres", "📅 Abonnements", "📌 Suivi", "💬 WhatsApp", "📦 Archives"])
 
     # ✅ Nettoyage du session_state au changement de menu (pour éviter les formulaires qui restent ouverts)
     if st.session_state.get('last_menu') != menu:
@@ -2681,7 +2681,7 @@ elif st.session_state['role'] == 'equipe':
             afficher_historique_suivi(eid, filtre_type) 
         
     # WhatsApp
-    elif menu == "WhatsApp":
+    elif menu == "💬 WhatsApp":
         st.markdown(f'<h2 style="color:#1A237E;">💬 Messages WhatsApp - {nom_equipe}</h2>', unsafe_allow_html=True)
         tab1, tab2 = st.tabs(["🎂 Anniversaires", "📢 Rappels réabonnement"])
         with tab1:

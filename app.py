@@ -786,7 +786,7 @@ st.markdown("---")
 
 # ==================== DIOCÈSE ====================
 if st.session_state['role'] == 'diocese':
-    # Après (supprimer "📊 Export Excel")
+    # Après (supprimer "📥 Export Excel")
     menu = st.sidebar.radio("Navigation", ["Voir diocèse", "Créer paroisses", "Gérer paroisses", "Rechercher par matricule", "Gérer les accès", "📊 Statistiques", "📅 Abonnements", "📌 Suivi", "💬 WhatsApp", "📦 Archives", "🗑️ Réinitialiser tout"])
 
     # Voir diocèse
@@ -1392,8 +1392,8 @@ if st.session_state['role'] == 'diocese':
             afficher_rappels_reabonnement_whatsapp(annee_rappel)
     
     # Export Excel
-    elif menu == "📊 Export Excel":
-        st.markdown('<h2 style="color:#1A237E;">📊 Export des données</h2>', unsafe_allow_html=True)
+    elif menu == "📥 Export Excel":
+        st.markdown('<h2 style="color:#1A237E;">📥 Export des données</h2>', unsafe_allow_html=True)
         nb_membres = c.execute("SELECT COUNT(*) FROM membres").fetchone()[0]
         if nb_membres == 0:
             st.warning("Aucune donnée à exporter.")
@@ -1475,7 +1475,7 @@ if st.session_state['role'] == 'diocese':
 elif st.session_state['role'] == 'paroisse':
     pid = st.session_state['paroisse_id']
     nom_paroisse = c.execute("SELECT nom FROM paroisses WHERE id=?", (pid,)).fetchone()[0]
-    menu = st.sidebar.radio("Navigation", ["🏘️ Ma paroisse", "👥 Mes équipes", "👤 Membres", "📊 Statistiques", "📅 Abonnements", "📌 Suivi", "💬 WhatsApp", "📊 Export Excel", "📦 Archives"])
+    menu = st.sidebar.radio("Navigation", ["🏘️ Ma paroisse", "👥 Mes équipes", "👤 Membres", "📊 Statistiques", "📅 Abonnements", "📌 Suivi", "💬 WhatsApp", "📥 Export Excel", "📦 Archives"])
     
     # Ma paroisse
     if menu == "🏘️ Ma paroisse":
@@ -1959,7 +1959,7 @@ elif st.session_state['role'] == 'paroisse':
             # Export Excel
             if membres:
                 st.markdown("---")
-                st.markdown("### 📊 Export des données")
+                st.markdown("### 📥 Export des données")
                 df_export = pd.DataFrame([(m[1], m[2], m[3], m[7], m[4], m[6]) for m in membres], 
                                         columns=["Matricule", "Nom", "Prénom", "N° méditation", "WhatsApp", "Date adhésion"])
                 output = io.BytesIO()
@@ -2147,8 +2147,8 @@ elif st.session_state['role'] == 'paroisse':
                 st.info("Aucune équipe")
     
     # Export Excel
-    elif menu == "📊 Export Excel":
-        st.markdown(f'<h2 style="color:#1A237E;">📊 Export des membres de {nom_paroisse}</h2>', unsafe_allow_html=True)
+    elif menu == "📥 Export Excel":
+        st.markdown(f'<h2 style="color:#1A237E;">📥 Export des membres de {nom_paroisse}</h2>', unsafe_allow_html=True)
         membres = c.execute('''SELECT m.matricule, m.nom, m.prenom, m.date_naissance, m.whatsapp, m.date_adhesion, e.nom_equipe
                                FROM membres m
                                JOIN equipes e ON m.equipe_id = e.id
@@ -2445,7 +2445,7 @@ elif st.session_state['role'] == 'equipe':
         # Export Excel
         if membres:
             st.markdown("---")
-            st.markdown("### 📊 Export des données")
+            st.markdown("### 📥 Export des données")
             df_export = pd.DataFrame([(m[1], m[2], m[3], m[7], m[4], m[6]) for m in membres], 
                                     columns=["Matricule", "Nom", "Prénom", "N° méditation", "WhatsApp", "Date adhésion"])
             output = io.BytesIO()

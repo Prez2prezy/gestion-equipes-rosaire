@@ -537,8 +537,8 @@ def archiver_membre(membre_id, situation, annee_debut, annee_fin, commentaire, a
     paroisse_id = c.execute("SELECT paroisse_id FROM equipes WHERE id=?", (equipe_id,)).fetchone()
     paroisse_id = paroisse_id[0] if paroisse_id else None
 
-    date_debut_obj = date(annee_debut, 10, 1)
-    date_fin_obj = date(annee_fin, 10, 1)
+    date_debut_obj = date(annee_debut, 9, 1)
+    date_fin_obj = date(annee_fin, 9, 1)
 
     c.execute("UPDATE membres SET statut='archive' WHERE id=?", (membre_id,))
     c.execute('''INSERT INTO archives (membre_id, situation, date_debut, date_fin, commentaire,
@@ -1430,7 +1430,7 @@ if st.session_state['role'] == 'diocese':
                     st.write(f"Paroisse : {a[7]}")
                     st.write(f"Équipe : {a[8]}")
                     if date_debut and date_fin:
-                        st.write(f"Période : Oct {date_debut.year} – Oct {date_fin.year} ({duree} an(s))")
+                        st.write(f"Période : Sept {date_debut.year} – Sept {date_fin.year} ({duree} an(s))")
                     if a[6]:
                         st.write(f"Commentaire : {a[6]}")
 
@@ -2148,6 +2148,8 @@ elif st.session_state['role'] == 'paroisse':
             st.warning("Aucun membre actif")
 
 
+
+    
     # Archives (lecture seule)
     elif menu == "📦 Archives":
         st.markdown(f'<h2 style="color:#1A237E; font-size: 1.4rem;">📦 Archives - {nom_paroisse}</h2>', unsafe_allow_html=True)
@@ -2157,28 +2159,29 @@ elif st.session_state['role'] == 'paroisse':
             FROM archives a
             JOIN membres m ON a.membre_id = m.id
             LEFT JOIN equipes e ON a.equipe_id = e.id
-            WHERE a.paroisse_id = ?
+            WHERE a.paroisse_id = ? OR e.paroisse_id = ?
             ORDER BY a.date_fin DESC
-        ''', (pid,)).fetchall()
+        ''', (pid, pid)).fetchall()        
         if not archives:
             st.info("Aucune archive pour cette paroisse")
         else:
             for a in archives:
                 situation_affichee = afficher_situation(a[3])
                 icone = {"Déplacé": "📤", "Radié": "🚫", "Défunt": "🕊️"}.get(a[3], "📌")
-                
                 date_debut = safe_date(a[4])
                 date_fin = safe_date(a[5])
                 duree = (date_fin - date_debut).days // 365 if date_debut and date_fin else 0
                 date_fin_str = date_fin.strftime('%d/%m/%Y') if date_fin else "?"
-                
                 with st.expander(f"{icone} {a[1]} {a[2]} ({a[0]}) – {situation_affichee} – {date_fin_str}"):
                     st.write(f"Ajouté par : {a[8]}") # Index 8 pour la paroisse
                     st.write(f"Équipe : {a[7]}")
                     if date_debut and date_fin:
-                        st.write(f"Période : Oct {date_debut.year} – Oct {date_fin.year} ({duree} an(s))")
+                        st.write(f"Période : Sept {date_debut.year} – Sept {date_fin.year} a médité ({duree} an(s)) avec nous")
                     if a[6]:
                         st.write(f"Commentaire : {a[6]}")
+
+
+
 
 # ==================== ÉQUIPE ====================
 elif st.session_state['role'] == 'equipe':

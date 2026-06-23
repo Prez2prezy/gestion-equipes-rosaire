@@ -2146,9 +2146,6 @@ elif st.session_state['role'] == 'paroisse':
         else:
             st.warning("Aucun membre actif")
 
-
-
-    
     # Archives (lecture seule)
     elif menu == "📦 Archives":
         st.markdown(f'<h2 style="color:#1A237E; font-size: 1.4rem;">📦 Archives - {nom_paroisse}</h2>', unsafe_allow_html=True)
@@ -2160,7 +2157,7 @@ elif st.session_state['role'] == 'paroisse':
             LEFT JOIN equipes e ON a.equipe_id = e.id
             WHERE a.paroisse_id = ? OR e.paroisse_id = ?
             ORDER BY a.date_fin DESC
-        ''', (pid, pid)).fetchall()    
+        ''', (pid,)).fetchall()    
         if not archives:
             st.info("Aucune archive pour cette paroisse")
         else:
@@ -2183,9 +2180,6 @@ elif st.session_state['role'] == 'paroisse':
                     st.write(f"Équipe : {a[7]}")
                     if a[6]:
                         st.write(f"Commentaire : {a[6]}")
-
-
-
 
 # ==================== ÉQUIPE ====================
 elif st.session_state['role'] == 'equipe':

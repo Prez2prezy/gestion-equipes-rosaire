@@ -297,7 +297,7 @@ def ajouter_evenement_agenda(equipe_id=None, paroisse_id=None, diocese_id=None, 
                 source = ""
                 if equipe_id:
                     eq_nom = c.execute("SELECT nom_equipe FROM equipes WHERE id=?", (equipe_id,)).fetchone()
-                    source = f"Équipe {eq_nom[0]}" if eq_nom else "Équipe"
+                    source = f"{eq_nom[0]}" if eq_nom else "Équipe"
                 elif paroisse_id:
                     par_nom = c.execute("SELECT nom FROM paroisses WHERE id=?", (paroisse_id,)).fetchone()
                     source = f"Paroisse {par_nom[0]}" if par_nom else "Paroisse"

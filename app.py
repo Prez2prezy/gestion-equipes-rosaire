@@ -290,10 +290,10 @@ def ajouter_evenement_agenda(equipe_id=None, paroisse_id=None, diocese_id=None, 
                              VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
                           (equipe_id, paroisse_id, diocese_id, date_agenda.isoformat(), type_agenda, lieu_agenda, desc_agenda, auteur_nom))
                 commit_and_sync()
-                st.success("Événement enregistré avec succès ! ✅")
+                st.success("évènement enregistré avec succès ! ✅")
                 
                 # ✅ ENVOI DE LA NOTIFICATION TELEGRAM
-                # On détermine la source (qui ajoute l'événement ?)
+                # On détermine la source (qui ajoute l'évènement ?)
                 source = ""
                 if equipe_id:
                     eq_nom = c.execute("SELECT nom_equipe FROM equipes WHERE id=?", (equipe_id,)).fetchone()
@@ -304,7 +304,7 @@ def ajouter_evenement_agenda(equipe_id=None, paroisse_id=None, diocese_id=None, 
                 elif diocese_id:
                     source = "Diocèse"
 
-                msg = f"📅 <b>Équipes du Rosaire Gd-Bassam \n      Nouvel événement à l'agenda !</b>\n\n"
+                msg = f"📅 <b>Équipes du Rosaire Gd-Bassam \n      Nouvel évènement à l'agenda !</b>\n\n"
                 msg += f"🏢 <b>Source :</b> {source}\n"
                 msg += f"⛪ <b>Type :</b> {type_agenda}\n"
                 msg += f"🗓 <b>Date :</b> {date_agenda.strftime('%d/%m/%Y')}\n"

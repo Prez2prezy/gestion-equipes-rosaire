@@ -15,6 +15,8 @@ import urllib.parse
 import time # ✅ Nécessaire pour faire une pause d'une seconde
 import cloudinary
 import cloudinary.uploader
+import requests
+
 
 # --- Configuration de la page ---
 st.set_page_config(page_title="Gestionnaire des Équipes du Rosaire - Diocèse de Grand-Bassam", layout="wide")
@@ -282,13 +284,38 @@ def ajouter_evenement_agenda(equipe_id=None, paroisse_id=None, diocese_id=None, 
                 type_agenda = st.selectbox("⛪ Type", ["Prière mensuelle", "Prière commune", "Prière spéciale", "Pèlerinage", "Réunion", "Autre"], key=f"type_ag_{prefix}")
             lieu_agenda = st.text_input("📍 Lieu", key=f"lieu_ag_{prefix}")
             desc_agenda = st.text_area("📝 Description / Notes (optionnel)", key=f"desc_ag_{prefix}")
-            
+
             if st.form_submit_button("📅 Enregistrer dans l'agenda", use_container_width=True):
                 c.execute('''INSERT INTO agenda (equipe_id, paroisse_id, diocese_id, date_event, type_event, lieu, description, auteur_nom) 
                              VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
                           (equipe_id, paroisse_id, diocese_id, date_agenda.isoformat(), type_agenda, lieu_agenda, desc_agenda, auteur_nom))
                 commit_and_sync()
-                st.success("évènement enregistré avec succès ! ✅")
+                st.success("Événement enregistré avec succès ! ✅")
+                
+                # ✅ ENVOI DE LA NOTIFICATION TELEGRAM
+                # On détermine la source (qui ajoute l'événement ?)
+                source = ""
+                if equipe_id:
+                    eq_nom = c.execute("SELECT nom_equipe FROM equipes WHERE id=?", (equipe_id,)).fetchone()
+                    source = f"Équipe {eq_nom[0]}" if eq_nom else "Équipe"
+                elif paroisse_id:
+                    par_nom = c.execute("SELECT nom FROM paroisses WHERE id=?", (paroisse_id,)).fetchone()
+                    source = f"Paroisse {par_nom[0]}" if par_nom else "Paroisse"
+                elif diocese_id:
+                    source = "Diocèse"
+
+                msg = f"📅 <b>Nouvel événement à l'agenda !</b>\n\n"
+                msg += f"🏢 <b>Source :</b> {source}\n"
+                msg += f"⛪ <b>Type :</b> {type_agenda}\n"
+                msg += f"🗓 <b>Date :</b> {date_agenda.strftime('%d/%m/%Y')}\n"
+                if lieu_agenda:
+                    msg += f"📍 <b>Lieu :</b> {lieu_agenda}\n"
+                if desc_agenda:
+                    msg += f"📝 <b>Détails :</b> {desc_agenda}\n"
+                msg += f"👤 <b>Ajouté par :</b> {auteur_nom}"
+                
+                envoyer_notification_telegram(msg)
+                
                 st.rerun()
 
 def afficher_agenda_complet_universel(equipe_id=None, paroisse_id=None, diocese_id=None):
@@ -429,6 +456,22 @@ def afficher_agenda(equipe_id):
                 if item_desc: st.write(f"📝 **Détails :** {item_desc}")
     else:
         st.info("Aucun évènement à venir pour cette équipe.")
+
+def envoyer_notification_telegram(message):
+    """Envoie une notification via Telegram."""
+    try:
+        token = st.secrets.get("TELEGRAM_BOT_TOKEN")
+        chat_id = st.secrets.get("TELEGRAM_CHAT_ID")
+        if token and chat_id:
+            url = f"https://api.telegram.org/bot{token}/sendMessage"
+            payload = {
+                "chat_id": chat_id,
+                "text": message,
+                "parse_mode": "HTML" # Permet de mettre en gras
+            }
+            requests.post(url, json=payload)
+    except Exception:
+        pass # Si Telegram bug, on ne fait pas planter l'application
 
 # ✅ Widget centralisé pour le choix abonnement/réabonnement
 def widget_type_abonnement(key_prefix, membre_id, annee_debut):

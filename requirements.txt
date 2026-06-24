@@ -4,3 +4,4 @@ openpyxl
 Pillow
 cloudinary
 libsql-experimental
+requests

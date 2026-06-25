@@ -2257,7 +2257,7 @@ elif st.session_state['role'] == 'equipe':
     nom_equipe = equipe_info[0] if equipe_info else "Mon équipe"
     
     menu = st.sidebar.radio("Navigation", [
-        "Mon équipe", "👤 Mes membres", "📅 Abonnements", "📌 Suivi", "💬 WhatsApp", "📦 Archives"])
+        "👥 Mon équipe", "👤 Mes membres", "📅 Abonnements", "📌 Suivi", "💬 WhatsApp", "📦 Archives"])
 
     # ✅ Nettoyage du session_state au changement de menu (pour éviter les formulaires qui restent ouverts)
     if st.session_state.get('last_menu') != menu:

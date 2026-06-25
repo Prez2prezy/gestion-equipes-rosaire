@@ -1113,7 +1113,7 @@ if st.session_state['role'] == 'diocese':
             st.session_state['abos_view_type'] = None  # 'equipes' ou 'membres'
         
         annee_debut = st.number_input("Année de début de la période", min_value=2020, max_value=date.today().year, value=date.today().year-1, step=1)
-        periode_aff = f"Sept {annee_debut} – Sept {annee_debut+1}"
+        periode_aff = f"Sept {annee_debut-1} – Sept {annee_debut}"
         st.write(f"**Période :** {periode_aff}")
         
         # Statistiques générales
@@ -2037,7 +2037,7 @@ elif st.session_state['role'] == 'paroisse':
             st.session_state['show_equipe_abos_par'] = None
         
         annee_debut = st.number_input("Année de début de la période", min_value=2020, max_value=date.today().year, value=date.today().year-1, step=1)
-        periode_aff = f"Sept {annee_debut} – Sept {annee_debut+1}"
+        periode_aff = f"Sept {annee_debut-1} – Sept {annee_debut}"
         st.write(f"**Période :** {periode_aff}")
         
         # Statistiques de la paroisse

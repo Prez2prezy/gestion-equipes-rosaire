@@ -17,7 +17,6 @@ import cloudinary
 import cloudinary.uploader
 import requests
 
-
 # --- Configuration de la page ---
 st.set_page_config(page_title="Gestionnaire des Équipes du Rosaire - Diocèse de Grand-Bassam", layout="wide")
 
@@ -2258,7 +2257,7 @@ elif st.session_state['role'] == 'equipe':
     nom_equipe = equipe_info[0] if equipe_info else "Mon équipe"
     
     menu = st.sidebar.radio("Navigation", [
-        "Mon équipe", "Mes membres", "📅 Abonnements", "📌 Suivi", "💬 WhatsApp", "📦 Archives"])
+        "Mon équipe", "👤 Mes membres", "📅 Abonnements", "📌 Suivi", "💬 WhatsApp", "📦 Archives"])
 
     # ✅ Nettoyage du session_state au changement de menu (pour éviter les formulaires qui restent ouverts)
     if st.session_state.get('last_menu') != menu:
@@ -2268,7 +2267,7 @@ elif st.session_state['role'] == 'equipe':
         st.session_state['last_menu'] = menu
 
     # Mon équipe
-    if menu == "Mon équipe":
+    if menu == "👥 Mon équipe":
         # ... (la suite de votre code)
         st.markdown(f'<h2 style="color:#1A237E; font-size: 1.4rem;">👥 {nom_equipe}</h2>', unsafe_allow_html=True)
         eq = c.execute("SELECT responsable, bureau FROM equipes WHERE id=?", (eid,)).fetchone()

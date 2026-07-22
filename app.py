@@ -270,7 +270,8 @@ def supprimer_photo(photo_path):
 
 def ajouter_evenement_agenda(equipe_id=None, paroisse_id=None, diocese_id=None, auteur_nom="Système"):
     """Formulaire d'ajout d'un évènement."""
-    st.subheader("📅 Vos évènements à venir")
+    st.markdown(f'<h3 style="color:#1A237E;">📅 Vos évènements à venir</h3>', unsafe_allow_html=True)
+    # st.subheader("📅 Vos évènements à venir")
     
     prefix = f"ag_{equipe_id}_{paroisse_id}_{diocese_id}"
     
@@ -319,7 +320,8 @@ def ajouter_evenement_agenda(equipe_id=None, paroisse_id=None, diocese_id=None, 
 
 def afficher_agenda_complet_universel(equipe_id=None, paroisse_id=None, diocese_id=None):
     """Affiche l'agenda global en fonction du niveau hiérarchique de l'utilisateur."""
-    st.subheader("📋 Planification des agendas")
+    st.markdown(f'<h3 style="color:#1A237E;">📋 Planification des agendas</h3>', unsafe_allow_html=True)
+    # st.subheader("📋 Planification des agendas")
     
     aujourd_hui = date.today()
     # ✅ On convertit la date en texte ICI, une bonne fois pour toutes
@@ -2190,7 +2192,7 @@ elif st.session_state['role'] == 'paroisse':
     
     # Export Excel
     elif menu == "📥 Export Excel":
-        st.markdown(f'<h2 style="color:#1A237E;">📥 Export des membres de {nom_paroisse}</h2>', unsafe_allow_html=True)
+        st.markdown(f'<h2 style="color:#1A237E;">📥 Export des membres - {nom_paroisse}</h2>', unsafe_allow_html=True)
         membres = c.execute('''SELECT m.matricule, m.nom, m.prenom, m.date_naissance, m.whatsapp, m.date_adhesion, e.nom_equipe
                                FROM membres m
                                JOIN equipes e ON m.equipe_id = e.id

@@ -70,7 +70,7 @@ st.markdown("""
         overflow: hidden !important;
         text-overflow: ellipsis !important;
         font-size: clamp(0.8rem, 4vw, 1.2rem) !important;
-        margin-bottom: 15px !important;
+        margin-bottom: 5px !important;
     }
     
     /* BLOC D'INFORMATIONS */
